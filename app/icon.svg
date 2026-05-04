@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <style>
+    .checkers { fill: #18181B; } /* Zinc-900 para modo claro */
+    @media (prefers-color-scheme: dark) {
+      .checkers { fill: #FAFAFA; } /* Zinc-50 para modo oscuro */
+    }
+  </style>
+  
+  <!-- Curva "C" / Hairpin de pista -->
+  <path 
+    d="M 76 15 H 43 A 35 35 0 0 0 8 50 A 35 35 0 0 0 43 85 H 76 L 61 60 H 43 A 10 10 0 0 1 33 50 A 10 10 0 0 1 43 40 H 61 Z" 
+    fill="#DC2626" 
+  />
+  
+  <!-- Bandera a cuadros saliendo del centro -->
+  <path 
+    class="checkers" 
+    d="M 64 42 h 8 l -2 8 h -8 z M 84 42 h 8 l -2 8 h -8 z M 72 50 h 8 l -2 8 h -8 z" 
+  />
+</svg>
