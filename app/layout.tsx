@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className={`${inter.variable} h-full antialiased dark`}>
+    <html lang="es" className={`${inter.variable} h-full antialiased dark`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col bg-zinc-950 text-white">
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           {children}

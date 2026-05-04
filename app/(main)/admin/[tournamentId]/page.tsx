@@ -12,6 +12,7 @@ import { AuditLog } from "@/lib/models/AuditLog";
 import { ResultsForm } from "./ResultsForm";
 import { ParticipantsPanel } from "./ParticipantsPanel";
 import { AuditLogPanel } from "./AuditLogPanel";
+import { DeleteTournament } from "./DeleteTournament";
 
 async function getAdminData(tournamentId: string, userId: string) {
   await connectDB();
@@ -92,7 +93,7 @@ async function getAdminData(tournamentId: string, userId: string) {
     action: log.action as string,
     details: log.details,
     createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : null,
-    userName: (log.user as unknown as { name?: string }).name ?? "Sistema",
+      userName: (log.user as unknown as { name?: string } | null)?.name ?? "Sistema",
     gpName: (log.grandPrix as unknown as { name?: string } | null)?.name ?? null,
   }));
 
@@ -164,6 +165,11 @@ export default async function AdminPage({
       <section>
         <h2 className="text-lg font-semibold mb-3">Historial de cambios</h2>
         <AuditLogPanel entries={logEntries} />
+      </section>
+
+      <section className="border-t border-zinc-800 pt-8">
+        <h2 className="text-lg font-semibold text-red-400 mb-3">Zona peligrosa</h2>
+        <DeleteTournament tournamentId={tournament.id} />
       </section>
     </div>
   );

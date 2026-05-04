@@ -8,6 +8,8 @@ import { nanoid } from "nanoid";
 import { auth } from "@/lib/auth";
 import { connectDB } from "@/lib/db/mongoose";
 import { Tournament } from "@/lib/models/Tournament";
+import { Prediction } from "@/lib/models/Prediction";
+import { Score } from "@/lib/models/Score";
 import { AuditLog } from "@/lib/models/AuditLog";
 
 type ActionResult<T = undefined> =
@@ -122,6 +124,37 @@ export async function regenerateInviteCode(
     return {
       success: false,
       error: err instanceof Error ? err.message : "Error al regenerar el código",
+    };
+  }
+}
+
+export async function deleteTournament(
+  tournamentId: string
+): Promise<ActionResult> {
+  try {
+    const session = await getSession();
+    await connectDB();
+
+    const tournament = await Tournament.findById(tournamentId);
+    if (!tournament) return { success: false, error: "Torneo no encontrado" };
+    if (tournament.creator.toString() !== session.user.id)
+      return { success: false, error: "Solo el creador puede eliminar el torneo" };
+
+    const tournamentObjectId = new Types.ObjectId(tournamentId);
+
+    await Promise.all([
+      Prediction.deleteMany({ tournament: tournamentObjectId }),
+      Score.deleteMany({ tournament: tournamentObjectId }),
+      AuditLog.deleteMany({ tournament: tournamentObjectId }),
+    ]);
+
+    await Tournament.findByIdAndDelete(tournamentId);
+
+    return { success: true, data: undefined };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error al eliminar el torneo",
     };
   }
 }

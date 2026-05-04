@@ -39,6 +39,18 @@ export default async function MainLayout({
             >
               Dashboard
             </Link>
+            <Link
+              href="/calendar"
+              className="px-3 py-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            >
+              Calendario
+            </Link>
+            <Link
+              href="/profile"
+              className="px-3 py-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            >
+              Perfil
+            </Link>
           </nav>
 
           <UserMenu
