@@ -203,6 +203,10 @@ export async function saveRetroactivePrediction(
       details: `Predicción retroactiva para ${targetUser?.name ?? userId} — ${gp.name}: ${podium}`,
     });
 
+    if (gp.status === "completed") {
+      await recalculateScoresForGP(gpId);
+    }
+
     return { success: true };
   } catch (err) {
     return {
