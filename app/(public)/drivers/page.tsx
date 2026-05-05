@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { connectDB } from "@/lib/db/mongoose";
 import { Driver } from "@/lib/models/Driver";
 import { GrandPrix } from "@/lib/models/GrandPrix";
@@ -84,9 +85,9 @@ export default async function DriversPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {drivers.map((driver) => (
+          <Link key={driver.code} href={`/drivers/${driver.code.toLowerCase()}`}>
           <Card
-            key={driver.code}
-            className="px-4 py-3.5 border-zinc-800 bg-zinc-900/80 hover:border-zinc-700 transition-colors"
+            className="px-4 py-3.5 border-zinc-800 bg-zinc-900/80 hover:border-zinc-700 transition-colors cursor-pointer"
           >
             <div className="flex items-start gap-3">
               {driver.headshotUrl ? (
@@ -138,6 +139,7 @@ export default async function DriversPage() {
               </div>
             </div>
           </Card>
+          </Link>
         ))}
       </div>
     </div>

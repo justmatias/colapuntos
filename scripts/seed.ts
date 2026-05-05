@@ -246,8 +246,17 @@ async function seedCalendar(season: number) {
     return;
   }
 
+  // Temporarily shift all existing round numbers into the 90000+ range so the
+  // (season, round) unique index never conflicts when we re-assign rounds below.
+  // This is safe even if OpenF1 adds/removes events between seed runs.
+  const existingDocs = await GrandPrix.find({ season }).select("_id round").lean();
+  for (let j = 0; j < existingDocs.length; j++) {
+    await GrandPrix.updateOne({ _id: existingDocs[j]._id }, { round: 90000 + j });
+  }
+
   let upserted = 0;
   let provisional = 0;
+  const validMeetingKeys = raceWeekends.map((m) => m.meeting_key);
 
   for (let i = 0; i < raceWeekends.length; i++) {
     const m = raceWeekends[i];
@@ -265,8 +274,11 @@ async function seedCalendar(season: number) {
       console.log(`  ~ Round ${i + 1}: ${m.meeting_name} (no race session yet, using meeting date)`);
     }
 
+    // Use meetingKey as the stable identifier so the same GP document (ObjectId) is
+    // always updated regardless of round number changes. This keeps RaceResult /
+    // Prediction / Score references correct across re-seeds.
     await GrandPrix.findOneAndUpdate(
-      { season, round: i + 1 },
+      { season, meetingKey: m.meeting_key },
       {
         season,
         round: i + 1,
@@ -286,6 +298,15 @@ async function seedCalendar(season: number) {
       { upsert: true, new: true }
     );
     upserted++;
+  }
+
+  // Delete stale documents (e.g. pre-season testing events that were previously seeded).
+  const stale = await GrandPrix.deleteMany({
+    season,
+    meetingKey: { $nin: validMeetingKeys },
+  });
+  if (stale.deletedCount > 0) {
+    console.log(`  ✗ ${stale.deletedCount} stale entrie(s) removed (e.g. testing events)`);
   }
 
   console.log(
