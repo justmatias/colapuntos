@@ -16,14 +16,18 @@ async function getUserProfile(userId: string, userName: string, userEmail: strin
 
   const objectUserId = new Types.ObjectId(userId);
 
-  const [dbUser, drivers, predictions, scores, gps, results] = await Promise.all([
+  const [dbUser, drivers, predictions, scores, gps] = await Promise.all([
     User.findById(objectUserId).select("favoriteDriverCode favoriteDriverHeadshot").lean(),
     Driver.find({ season, active: true }).sort({ lastName: 1 }).lean(),
     Prediction.find({ user: objectUserId }).lean(),
     Score.find({ user: objectUserId }).lean(),
     GrandPrix.find({ season }).sort({ round: 1 }).lean(),
-    RaceResult.find({}).select("grandPrix").lean(),
   ]);
+
+  const gpIds = gps.map((g) => g._id);
+  const results = await RaceResult.find({ grandPrix: { $in: gpIds } })
+    .select("grandPrix")
+    .lean();
 
   const completedGpIds = new Set(results.map((r) => r.grandPrix.toString()));
   const completedGPs = gps.filter((g) => completedGpIds.has(g._id.toString()));

@@ -1,9 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { zObjectId } from "@/lib/validation";
 import { connectDB } from "@/lib/db/mongoose";
 import { Tournament } from "@/lib/models/Tournament";
 import { GrandPrix } from "@/lib/models/GrandPrix";
@@ -33,11 +35,11 @@ async function requireCreator(tournamentId: string, userId: string) {
 }
 
 const SaveResultSchema = z.object({
-  tournamentId: z.string().min(1),
-  gpId: z.string().min(1),
-  p1: z.string().min(1),
-  p2: z.string().min(1),
-  p3: z.string().min(1),
+  tournamentId: zObjectId,
+  gpId: zObjectId,
+  p1: zObjectId,
+  p2: zObjectId,
+  p3: zObjectId,
 });
 
 export async function saveRaceResult(
@@ -61,18 +63,26 @@ export async function saveRaceResult(
   try {
     const session = await getSession();
     await connectDB();
-    await requireCreator(tournamentId, session.user.id);
+    const tournament = await requireCreator(tournamentId, session.user.id);
 
     const gp = await GrandPrix.findById(gpId).lean();
     if (!gp) return { success: false, error: "Gran Premio no encontrado" };
+
+    if (gp.season !== tournament.season)
+      return { success: false, error: "El GP no pertenece a la temporada de este torneo" };
 
     if (new Date() < new Date(gp.raceDate))
       return { success: false, error: "Solo se pueden cargar resultados de carreras pasadas" };
 
     const [existing, drivers] = await Promise.all([
       RaceResult.findOne({ grandPrix: gpId }).lean(),
-      Driver.find({ _id: { $in: [p1, p2, p3] } }).select("code fullName").lean(),
+      Driver.find({ _id: { $in: [p1, p2, p3] }, season: tournament.season })
+        .select("code fullName")
+        .lean(),
     ]);
+
+    if (drivers.length !== 3)
+      return { success: false, error: "Uno o más pilotos no son válidos para esta temporada" };
 
     const driverMap = new Map(drivers.map((d) => [d._id.toString(), d.code]));
 
@@ -116,6 +126,8 @@ export async function saveRaceResult(
       details,
     });
 
+    revalidatePath(`/tournaments/${tournamentId}`, "layout");
+    revalidatePath(`/admin/${tournamentId}`);
     return { success: true };
   } catch (err) {
     return {
@@ -126,12 +138,12 @@ export async function saveRaceResult(
 }
 
 const RetroactivePredictionSchema = z.object({
-  tournamentId: z.string().min(1),
-  gpId: z.string().min(1),
-  userId: z.string().min(1),
-  p1: z.string().min(1),
-  p2: z.string().min(1),
-  p3: z.string().min(1),
+  tournamentId: zObjectId,
+  gpId: zObjectId,
+  userId: zObjectId,
+  p1: zObjectId,
+  p2: zObjectId,
+  p3: zObjectId,
 });
 
 export async function saveRetroactivePrediction(
@@ -167,6 +179,9 @@ export async function saveRetroactivePrediction(
     const gp = await GrandPrix.findById(gpId).lean();
     if (!gp) return { success: false, error: "Gran Premio no encontrado" };
 
+    if (gp.season !== tournament.season)
+      return { success: false, error: "El GP no pertenece a la temporada de este torneo" };
+
     if (new Date() < new Date(gp.raceDate))
       return { success: false, error: "Solo se pueden cargar predicciones de carreras pasadas" };
 
@@ -175,8 +190,13 @@ export async function saveRetroactivePrediction(
 
     const [targetUser, drivers] = await Promise.all([
       User.findById(userId).select("name").lean(),
-      Driver.find({ _id: { $in: [p1, p2, p3] } }).select("code").lean(),
+      Driver.find({ _id: { $in: [p1, p2, p3] }, season: tournament.season })
+        .select("code")
+        .lean(),
     ]);
+
+    if (drivers.length !== 3)
+      return { success: false, error: "Uno o más pilotos no son válidos para esta temporada" };
 
     const driverMap = new Map(drivers.map((d) => [d._id.toString(), d.code]));
     const podium = `P1: ${driverMap.get(p1) ?? "—"}, P2: ${driverMap.get(p2) ?? "—"}, P3: ${driverMap.get(p3) ?? "—"}`;
@@ -207,6 +227,8 @@ export async function saveRetroactivePrediction(
       await recalculateScoresForGP(gpId);
     }
 
+    revalidatePath(`/tournaments/${tournamentId}`, "layout");
+    revalidatePath(`/admin/${tournamentId}`);
     return { success: true };
   } catch (err) {
     return {
@@ -241,6 +263,8 @@ export async function toggleGPCancelled(
       details: `${gp.name} marcado como ${cancelled ? "no disponible" : "activo"}`,
     });
 
+    revalidatePath(`/admin/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`, "layout");
     return { success: true };
   } catch (err) {
     return {
@@ -280,6 +304,8 @@ export async function removeParticipant(
       details: `Eliminado participante "${removedName}"`,
     });
 
+    revalidatePath(`/admin/${tournamentId}`);
+    revalidatePath(`/tournaments/${tournamentId}`, "layout");
     return { success: true };
   } catch (err) {
     return {

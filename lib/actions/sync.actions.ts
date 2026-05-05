@@ -40,6 +40,9 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
   if (new Date() < new Date(gp.raceDate))
     return { success: false, error: "La carrera aún no se ha disputado" };
 
+  if (gp.status === "completed")
+    return { success: true, updated: false, details: "GP ya procesado" };
+
   if (!gp.raceSessionKey) {
     await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
     return { success: true, updated: true, details: "GP marcado como no disponible: sin sesión de carrera en OpenF1" };
@@ -106,23 +109,20 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
       )}`,
     };
 
-  const existing = await RaceResult.findOne({ grandPrix: gpId }).lean();
+  const before = await RaceResult.findOneAndUpdate(
+    { grandPrix: new Types.ObjectId(gpId) },
+    { p1: p1Id, p2: p2Id, p3: p3Id },
+    { upsert: true, new: false, setDefaultsOnInsert: true }
+  );
 
-  if (existing) {
+  if (before) {
     const same =
-      (existing.p1 as Types.ObjectId).toString() === p1Id.toString() &&
-      (existing.p2 as Types.ObjectId).toString() === p2Id.toString() &&
-      (existing.p3 as Types.ObjectId).toString() === p3Id.toString();
-
+      (before.p1 as Types.ObjectId).toString() === p1Id.toString() &&
+      (before.p2 as Types.ObjectId).toString() === p2Id.toString() &&
+      (before.p3 as Types.ObjectId).toString() === p3Id.toString();
     if (same)
       return { success: true, updated: false, details: "Resultado ya sincronizado, sin cambios" };
   }
-
-  await RaceResult.findOneAndUpdate(
-    { grandPrix: new Types.ObjectId(gpId) },
-    { p1: p1Id, p2: p2Id, p3: p3Id },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
 
   await GrandPrix.findByIdAndUpdate(gpId, { status: "completed" });
   await recalculateScoresForGP(gpId);

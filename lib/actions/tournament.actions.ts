@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { Types } from "mongoose";
@@ -59,6 +60,7 @@ export async function createTournament(
       members: [userId],
     });
 
+    revalidatePath("/dashboard");
     return { success: true, data: { id: tournament._id.toString() } };
   } catch (err) {
     return {
@@ -92,6 +94,7 @@ export async function joinTournament(
     tournament.members.push(userId);
     await tournament.save();
 
+    revalidatePath("/dashboard");
     return { success: true, data: { id: tournament._id.toString() } };
   } catch (err) {
     return {
@@ -154,6 +157,7 @@ export async function deleteTournament(
 
     await Tournament.findByIdAndDelete(tournamentId);
 
+    revalidatePath("/dashboard");
     return { success: true, data: undefined };
   } catch (err) {
     return {

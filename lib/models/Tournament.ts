@@ -23,5 +23,8 @@ const TournamentSchema = new Schema<ITournament>(
   { timestamps: true }
 );
 
+TournamentSchema.index({ members: 1 });
+TournamentSchema.index({ creator: 1 });
+
 export const Tournament =
   models.Tournament ?? model<ITournament>("Tournament", TournamentSchema);

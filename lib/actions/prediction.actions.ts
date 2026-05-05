@@ -1,12 +1,15 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { Types } from "mongoose";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
+import { zObjectId } from "@/lib/validation";
 import { connectDB } from "@/lib/db/mongoose";
 import { Tournament } from "@/lib/models/Tournament";
 import { GrandPrix } from "@/lib/models/GrandPrix";
+import { Driver } from "@/lib/models/Driver";
 import { Prediction } from "@/lib/models/Prediction";
 
 type ActionResult =
@@ -20,11 +23,11 @@ async function getSession() {
 }
 
 const SaveSchema = z.object({
-  tournamentId: z.string().min(1),
-  gpId: z.string().min(1),
-  p1: z.string().min(1),
-  p2: z.string().min(1),
-  p3: z.string().min(1),
+  tournamentId: zObjectId,
+  gpId: zObjectId,
+  p1: zObjectId,
+  p2: zObjectId,
+  p3: zObjectId,
 });
 
 export async function savePrediction(
@@ -60,8 +63,20 @@ export async function savePrediction(
     const gp = await GrandPrix.findById(gpId).lean();
     if (!gp) return { success: false, error: "Gran Premio no encontrado" };
 
+    if (gp.season !== tournament.season)
+      return { success: false, error: "El GP no pertenece a la temporada de este torneo" };
+
     if (new Date() > new Date(gp.predictionDeadline))
       return { success: false, error: "El plazo de predicciones ya cerró" };
+
+    const validDrivers = await Driver.find({
+      _id: { $in: [p1, p2, p3] },
+      season: tournament.season,
+    })
+      .select("_id")
+      .lean();
+    if (validDrivers.length !== 3)
+      return { success: false, error: "Uno o más pilotos no son válidos para esta temporada" };
 
     await Prediction.findOneAndUpdate(
       {
@@ -77,6 +92,7 @@ export async function savePrediction(
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
+    revalidatePath(`/tournaments/${tournamentId}`, "layout");
     return { success: true };
   } catch (err) {
     return {

@@ -70,7 +70,7 @@ export default async function ResultsPage({
       tournament: new Types.ObjectId(tournamentId),
       grandPrix: new Types.ObjectId(gpId),
     }).lean(),
-    Driver.find({ season: tournament.season }).lean(),
+    Driver.find({ season: tournament.season }).select("fullName").lean(),
   ]);
 
   const driverMap = new Map(drivers.map((d) => [d._id.toString(), d.fullName as string]));

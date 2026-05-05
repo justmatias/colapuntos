@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { Types } from "mongoose";
 import { auth } from "@/lib/auth";
@@ -33,6 +34,7 @@ export async function updateProfileName(
       return { success: false, error: "Usuario no encontrado" };
     }
 
+    revalidatePath("/profile");
     return { success: true };
   } catch (err) {
     return {
@@ -71,6 +73,7 @@ export async function updateFavoriteDriver(
       return { success: false, error: "Usuario no encontrado" };
     }
 
+    revalidatePath("/profile");
     return { success: true };
   } catch (err) {
     return {
