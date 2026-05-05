@@ -10,7 +10,6 @@ import { RaceResult } from "@/lib/models/RaceResult";
 import { Prediction } from "@/lib/models/Prediction";
 import { User } from "@/lib/models/User";
 import { AuditLog } from "@/lib/models/AuditLog";
-import { ResultsForm } from "./ResultsForm";
 import { RetroactivePredictionsPanel } from "./RetroactivePredictionsPanel";
 import { ParticipantsPanel } from "./ParticipantsPanel";
 import { AuditLogPanel } from "./AuditLogPanel";
@@ -153,21 +152,6 @@ export default async function AdminPage({
         <h1 className="text-2xl font-bold">{tournament.name}</h1>
         <p className="text-zinc-400 text-sm mt-0.5">Temporada {tournament.season}</p>
       </div>
-
-      <section>
-        <h2 className="text-lg font-semibold mb-3">Cargar resultado de carrera</h2>
-        {gpList.length === 0 ? (
-          <p className="text-zinc-500 text-sm">
-            No hay carreras pasadas para cargar resultados.
-          </p>
-        ) : (
-          <ResultsForm
-            tournamentId={tournament.id}
-            gps={gpList}
-            drivers={driverList}
-          />
-        )}
-      </section>
 
       <section>
         <h2 className="text-lg font-semibold mb-3">Cargar predicciones retroactivas</h2>
