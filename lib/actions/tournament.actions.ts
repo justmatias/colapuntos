@@ -46,6 +46,10 @@ export async function createTournament(
     const slug = `${base}-${nanoid(6)}`;
     const userId = new Types.ObjectId(session.user.id);
 
+    const existing = await Tournament.findOne({ creator: userId }).lean();
+    if (existing)
+      return { success: false, error: "Ya creaste un torneo. Solo se puede crear uno por cuenta." };
+
     const tournament = await Tournament.create({
       name: parsed.data.name,
       slug,

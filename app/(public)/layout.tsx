@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { Types } from "mongoose";
 import { auth } from "@/lib/auth";
+import { connectDB } from "@/lib/db/mongoose";
+import { User } from "@/lib/models/User";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MobileNav } from "@/components/mobile-nav";
+import { UserMenu } from "@/components/user-menu";
 
 export default async function PublicLayout({
   children,
@@ -11,6 +15,15 @@ export default async function PublicLayout({
   children: React.ReactNode;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
+
+  let headshotUrl: string | undefined;
+  if (session) {
+    await connectDB();
+    const dbUser = await User.findById(new Types.ObjectId(session.user.id))
+      .select("favoriteDriverHeadshot")
+      .lean();
+    headshotUrl = dbUser?.favoriteDriverHeadshot ?? undefined;
+  }
 
   const navLinks = session
     ? [
@@ -59,7 +72,13 @@ export default async function PublicLayout({
 
           <div className="flex items-center gap-2">
             <MobileNav links={navLinks} />
-            {!session && (
+            {session ? (
+              <UserMenu
+                name={session.user.name}
+                email={session.user.email}
+                headshotUrl={headshotUrl}
+              />
+            ) : (
               <Link
                 href="/login"
                 className={cn(
