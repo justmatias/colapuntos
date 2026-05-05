@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
-import { saveRaceResult } from "@/lib/actions/admin.actions";
+import { saveRaceResult, toggleGPCancelled } from "@/lib/actions/admin.actions";
 import { syncRaceResultsForGP } from "@/lib/actions/sync.actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,7 @@ type GPOption = {
   round: number;
   name: string;
   hasResult: boolean;
+  cancelled: boolean;
   existingResult?: {
     p1: string;
     p2: string;
@@ -105,6 +106,20 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
     }
   }, [selectedGP, gps]);
 
+  function handleToggleCancelled() {
+    if (!selectedGP) return;
+    const gp = gps.find((g) => g.id === selectedGP);
+    if (!gp) return;
+    startSyncing(async () => {
+      const result = await toggleGPCancelled(selectedGP, tournamentId, !gp.cancelled);
+      if (result.success) {
+        router.refresh();
+      } else {
+        setSyncMsg(result.error);
+      }
+    });
+  }
+
   function handleSync() {
     if (!selectedGP) return;
     setSyncMsg("");
@@ -135,14 +150,22 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
         <label className="text-sm text-zinc-400 mb-1.5 block">Gran Premio</label>
         <Select value={selectedGP} onValueChange={(v) => setSelectedGP(v ?? "")}>
           <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600 w-full">
-            <SelectValue placeholder="Seleccioná un Gran Premio" />
+            <SelectValue placeholder="Seleccioná un Gran Premio">
+              {(v: string) => {
+                const gp = gps.find((g) => g.id === v);
+                return gp ? `R${gp.round} — ${gp.name}` : null;
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-700 text-white">
             {gps.map((gp) => (
               <SelectItem key={gp.id} value={gp.id}>
                 <span className="font-mono text-xs text-zinc-500 mr-2">R{gp.round}</span>
-                {gp.name}
-                {gp.hasResult && (
+                <span className={gp.cancelled ? "text-zinc-500 line-through" : ""}>{gp.name}</span>
+                {gp.cancelled && (
+                  <span className="ml-2 text-xs text-red-400">⛔ no disponible</span>
+                )}
+                {!gp.cancelled && gp.hasResult && (
                   <span className="ml-2 text-xs text-green-400">✓ cargado</span>
                 )}
               </SelectItem>
@@ -151,7 +174,23 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
         </Select>
       </div>
 
-      {selectedGP && (
+      {selectedGP && currentGP?.cancelled && (
+        <div className="rounded-lg border border-red-900/40 bg-red-950/20 p-4 space-y-3">
+          <p className="text-sm text-red-400">⛔ Este GP está marcado como no disponible. No se pueden cargar resultados ni predicciones para él.</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggleCancelled}
+            disabled={syncing}
+            className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-white text-xs"
+          >
+            {syncing ? "Actualizando..." : "Reactivar GP"}
+          </Button>
+          {syncMsg && <p className="text-xs text-red-400">{syncMsg}</p>}
+        </div>
+      )}
+
+      {selectedGP && !currentGP?.cancelled && (
         <>
           {currentGP?.existingResult?.updatedAt && (
             <p className="text-xs text-zinc-500">
@@ -203,8 +242,13 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
                 {pos.label}
               </label>
               <Select value={selections[i]} onValueChange={setters[i]}>
-          <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600 w-full">
-                  <SelectValue placeholder="Seleccioná piloto" />
+                <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600 w-full">
+                  <SelectValue placeholder="Seleccioná piloto">
+                    {(v: string) => {
+                      const d = drivers.find((dr) => dr.id === v);
+                      return d ? `${d.number} — ${d.fullName}` : null;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-700 text-white">
                   {drivers.map((d) => (
@@ -236,6 +280,18 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
             {pending ? "Guardando..." : "Guardar resultado"}
           </Button>
         </form>
+
+          {!currentGP?.hasResult && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleCancelled}
+              disabled={syncing}
+              className="border-red-900/50 text-red-400/70 hover:bg-red-950/30 hover:text-red-400 text-xs w-full"
+            >
+              {syncing ? "Actualizando..." : "Marcar como no disponible"}
+            </Button>
+          )}
         </>
       )}
     </div>

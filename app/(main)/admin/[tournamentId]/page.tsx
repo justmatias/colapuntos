@@ -7,9 +7,11 @@ import { Tournament } from "@/lib/models/Tournament";
 import { GrandPrix } from "@/lib/models/GrandPrix";
 import { Driver } from "@/lib/models/Driver";
 import { RaceResult } from "@/lib/models/RaceResult";
+import { Prediction } from "@/lib/models/Prediction";
 import { User } from "@/lib/models/User";
 import { AuditLog } from "@/lib/models/AuditLog";
 import { ResultsForm } from "./ResultsForm";
+import { RetroactivePredictionsPanel } from "./RetroactivePredictionsPanel";
 import { ParticipantsPanel } from "./ParticipantsPanel";
 import { AuditLogPanel } from "./AuditLogPanel";
 import { DeleteTournament } from "./DeleteTournament";
@@ -63,6 +65,7 @@ async function getAdminData(tournamentId: string, userId: string) {
       id: gp._id.toString(),
       round: gp.round,
       name: gp.name,
+      cancelled: gp.cancelled ?? false,
       hasResult: !!existing,
       existingResult: existing ?? undefined,
     };
@@ -80,6 +83,23 @@ async function getAdminData(tournamentId: string, userId: string) {
     teamColour: d.teamColour,
     number: d.number,
   }));
+
+  const rawPredictions = await Prediction.find({
+    tournament: tournament._id,
+    grandPrix: { $in: gpIds },
+  })
+    .select("user grandPrix p1 p2 p3")
+    .lean();
+
+  const predictionMap: Record<string, { p1: string; p2: string; p3: string }> = {};
+  for (const pred of rawPredictions) {
+    const key = `${(pred.user as Types.ObjectId).toString()}_${(pred.grandPrix as Types.ObjectId).toString()}`;
+    predictionMap[key] = {
+      p1: (pred.p1 as Types.ObjectId).toString(),
+      p2: (pred.p2 as Types.ObjectId).toString(),
+      p3: (pred.p3 as Types.ObjectId).toString(),
+    };
+  }
 
   const auditLogs = await AuditLog.find({ tournament: tournament._id })
     .sort({ createdAt: -1 })
@@ -107,6 +127,7 @@ async function getAdminData(tournamentId: string, userId: string) {
     members,
     gpList,
     driverList,
+    predictionMap,
     logEntries,
   };
 }
@@ -123,7 +144,7 @@ export default async function AdminPage({
   const data = await getAdminData(tournamentId, session.user.id);
   if (!data) notFound();
 
-  const { tournament, members, gpList, driverList, logEntries } = data;
+  const { tournament, members, gpList, driverList, predictionMap, logEntries } = data;
 
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
@@ -144,6 +165,23 @@ export default async function AdminPage({
             tournamentId={tournament.id}
             gps={gpList}
             drivers={driverList}
+          />
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Cargar predicciones retroactivas</h2>
+        {gpList.filter((g) => !g.cancelled).length === 0 ? (
+          <p className="text-zinc-500 text-sm">
+            No hay carreras pasadas disponibles para cargar predicciones.
+          </p>
+        ) : (
+          <RetroactivePredictionsPanel
+            tournamentId={tournament.id}
+            members={members}
+            gps={gpList}
+            drivers={driverList}
+            predictions={predictionMap}
           />
         )}
       </section>

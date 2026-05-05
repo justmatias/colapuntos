@@ -12,6 +12,7 @@ export interface IGrandPrix extends Document {
   raceDate: Date;
   predictionDeadline: Date;
   status: GPStatus;
+  cancelled?: boolean;
   meetingKey?: number;
   raceSessionKey?: number;
   countryFlag?: string;
@@ -36,6 +37,7 @@ const GrandPrixSchema = new Schema<IGrandPrix>(
       enum: ["upcoming", "open", "closed", "completed"],
       default: "upcoming",
     },
+    cancelled: { type: Boolean, default: false },
     meetingKey: { type: Number },
     raceSessionKey: { type: Number },
     countryFlag: { type: String },

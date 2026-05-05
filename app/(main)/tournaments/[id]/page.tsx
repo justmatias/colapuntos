@@ -24,9 +24,11 @@ import {
 
 const STATUS_ICON: Record<string, string> = {
 	completed: '✅',
+	past: '🏁',
 	closed: '🔒',
 	open: '🟢',
 	upcoming: '⏳',
+	cancelled: '⛔',
 };
 
 function computeStatus(
@@ -36,6 +38,7 @@ function computeStatus(
 ): string {
 	if (hasResult) return 'completed';
 	const now = new Date();
+	if (raceDate < now) return 'past';
 	if (predictionDeadline < now) return 'closed';
 	const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 	if (predictionDeadline <= in48h) return 'open';
@@ -127,6 +130,7 @@ async function getTournamentData(tournamentId: string, userId: string) {
 		predictionDeadline: gp.predictionDeadline,
 		countryFlag: gp.countryFlag,
 		timezone: gp.timezone,
+		cancelled: gp.cancelled ?? false,
 		status: computeStatus(
 			new Date(gp.predictionDeadline),
 			new Date(gp.raceDate),
@@ -135,7 +139,7 @@ async function getTournamentData(tournamentId: string, userId: string) {
 	}));
 
 	const nextGP = gpList.find(
-		(g) => g.status === 'open' || g.status === 'upcoming',
+		(g) => !g.cancelled && (g.status === 'open' || g.status === 'upcoming'),
 	);
 
 	return {
@@ -266,12 +270,15 @@ export default async function TournamentPage({
 				<div className='space-y-2'>
 					{gpList.map((gp) => {
 						const isNext = nextGP?.id === gp.id;
+						const displayStatus = gp.cancelled ? 'cancelled' : gp.status;
 						return (
 							<div
 								key={gp.id}
 								className={cn(
 									'flex items-center gap-4 rounded-lg border px-4 py-3 transition-colors',
-									isNext
+									gp.cancelled
+										? 'border-zinc-800/50 bg-zinc-900/40 opacity-60'
+										: isNext
 										? 'border-amber-700/60 bg-amber-950/20 hover:border-amber-600/60'
 										: 'border-zinc-800 bg-zinc-900 hover:border-zinc-700',
 								)}
@@ -279,68 +286,104 @@ export default async function TournamentPage({
 								<span className='text-zinc-600 font-mono text-sm w-6 text-center'>
 									{gp.round}
 								</span>
-								<span className='text-lg'>{STATUS_ICON[gp.status]}</span>
-								<Link
-									href={`/tournaments/${tournament.id}/gp/${gp.id}/predict`}
-									className='flex-1 min-w-0'
-								>
-									<div className="flex items-center gap-2">
-										{gp.countryFlag && (
-											<img
-												src={gp.countryFlag}
-												alt={gp.country}
-												className="w-4 h-3 object-cover rounded-sm shrink-0"
-											/>
+								<span className='text-lg'>{STATUS_ICON[displayStatus]}</span>
+								{gp.cancelled ? (
+									<div className='flex-1 min-w-0'>
+										<div className="flex items-center gap-2">
+											{gp.countryFlag && (
+												<img
+													src={gp.countryFlag}
+													alt={gp.country}
+													className="w-4 h-3 object-cover rounded-sm shrink-0 grayscale"
+												/>
+											)}
+											<p className='font-medium text-zinc-500 line-through truncate'>{gp.name}</p>
+										</div>
+										<p className='text-xs text-zinc-600'>
+											{new Date(gp.raceDate).toLocaleDateString('es-AR', {
+												day: 'numeric',
+												month: 'short',
+											})}
+											{' — '}
+											{gp.circuit}
+										</p>
+									</div>
+								) : (
+									<Link
+										href={`/tournaments/${tournament.id}/gp/${gp.id}/predict`}
+										className='flex-1 min-w-0'
+									>
+										<div className="flex items-center gap-2">
+											{gp.countryFlag && (
+												<img
+													src={gp.countryFlag}
+													alt={gp.country}
+													className="w-4 h-3 object-cover rounded-sm shrink-0"
+												/>
+											)}
+											<p className='font-medium text-white truncate'>{gp.name}</p>
+											{isNext && gp.status === 'upcoming' && (
+												<Badge className="shrink-0 bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
+													Próximo
+												</Badge>
+											)}
+										</div>
+										<p className='text-xs text-zinc-500'>
+											{new Date(gp.raceDate).toLocaleDateString('es-AR', {
+												day: 'numeric',
+												month: 'short',
+											})}
+											{' — '}
+											{gp.circuit}
+										</p>
+									</Link>
+								)}
+								{gp.cancelled ? (
+									<Badge className='bg-red-950/50 text-red-400/70 border border-red-900/40 text-xs shrink-0 hidden sm:inline-flex'>
+										No disponible
+									</Badge>
+								) : (
+									<>
+										<Link
+											href={`/gp/${gp.id}`}
+											className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 hidden sm:inline"
+										>
+											Ver GP ↗
+										</Link>
+										{gp.status === 'open' && (
+											<Badge className='bg-green-700/30 text-green-400 border border-green-700/50 text-xs shrink-0 hidden sm:inline-flex'>
+												Abierto
+											</Badge>
 										)}
-										<p className='font-medium text-white truncate'>{gp.name}</p>
 										{isNext && gp.status === 'upcoming' && (
-											<Badge className="shrink-0 bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
+											<div className="shrink-0">
+												<GPCountdown
+													deadline={new Date(gp.predictionDeadline).toISOString()}
+													timezone={gp.timezone}
+												/>
+											</div>
+										)}
+										{!isNext && gp.status === 'upcoming' && (
+											<Badge className='bg-zinc-800 text-zinc-600 text-xs shrink-0 hidden sm:inline-flex'>
 												Próximo
 											</Badge>
 										)}
-									</div>
-									<p className='text-xs text-zinc-500'>
-										{new Date(gp.raceDate).toLocaleDateString('es-AR', {
-											day: 'numeric',
-											month: 'short',
-										})}
-										{' — '}
-										{gp.circuit}
-									</p>
-								</Link>
-								<Link
-									href={`/gp/${gp.id}`}
-									className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 hidden sm:inline"
-								>
-									Ver GP ↗
-								</Link>
-								{gp.status === 'open' && (
-									<Badge className='bg-green-700/30 text-green-400 border border-green-700/50 text-xs shrink-0 hidden sm:inline-flex'>
-										Abierto
-									</Badge>
-								)}
-								{isNext && gp.status === 'upcoming' && (
-									<div className="shrink-0">
-										<GPCountdown
-											deadline={new Date(gp.predictionDeadline).toISOString()}
-											timezone={gp.timezone}
-										/>
-									</div>
-								)}
-								{!isNext && gp.status === 'upcoming' && (
-									<Badge className='bg-zinc-800 text-zinc-600 text-xs shrink-0 hidden sm:inline-flex'>
-										Próximo
-									</Badge>
-								)}
-								{gp.status === 'closed' && (
-									<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
-										Cerrado
-									</Badge>
-								)}
-								{gp.status === 'completed' && (
-									<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
-										Completado
-									</Badge>
+										{gp.status === 'past' && (
+											<Badge className='bg-zinc-800 text-zinc-500 text-xs shrink-0 hidden sm:inline-flex'>
+												Sin resultado
+											</Badge>
+										)}
+										{gp.status === 'closed' && (
+											<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
+												Cerrado
+											</Badge>
+										)}
+										{gp.status === 'completed' && (
+											<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
+												Completado
+											</Badge>
+										)}
+									</>
 								)}
 							</div>
 						);

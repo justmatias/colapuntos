@@ -8,16 +8,11 @@ import { GPCountdown } from "./GPCountdown";
 
 const STATUS_ICON: Record<string, string> = {
   completed: "✅",
+  past: "🏁",
   closed: "🔒",
   open: "🟢",
   upcoming: "⏳",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  completed: "Completado",
-  closed: "Cerrado",
-  open: "Abierto",
-  upcoming: "Próximo",
+  cancelled: "⛔",
 };
 
 function computeStatus(
@@ -27,6 +22,7 @@ function computeStatus(
 ): string {
   if (hasResult) return "completed";
   const now = new Date();
+  if (raceDate < now) return "past";
   if (predictionDeadline < now) return "closed";
   const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
   if (predictionDeadline <= in48h) return "open";
@@ -56,11 +52,14 @@ async function getCalendarData() {
     timezone: gp.timezone,
     countryFlag: gp.countryFlag,
     circuitImage: gp.circuitImage,
-    status: computeStatus(
-      new Date(gp.predictionDeadline),
-      new Date(gp.raceDate),
-      resultSet.has(gp._id.toString())
-    ),
+    cancelled: gp.cancelled ?? false,
+    status: gp.cancelled
+      ? "cancelled"
+      : computeStatus(
+          new Date(gp.predictionDeadline),
+          new Date(gp.raceDate),
+          resultSet.has(gp._id.toString())
+        ),
   }));
 }
 
@@ -68,15 +67,19 @@ export default async function CalendarPage() {
   const gpList = await getCalendarData();
   const season = new Date().getFullYear();
 
-  const nextGP = gpList.find((g) => g.status === "open" || g.status === "upcoming");
-  const completedCount = gpList.filter((g) => g.status === "completed").length;
+  const activeGPs = gpList.filter((g) => !g.cancelled);
+  const nextGP = activeGPs.find((g) => g.status === "open" || g.status === "upcoming");
+  const completedCount = activeGPs.filter((g) => g.status === "completed").length;
+  const pastCount = activeGPs.filter((g) => g.status === "past").length;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Calendario {season}</h1>
         <p className="text-zinc-400 text-sm mt-0.5">
-          {gpList.length} carreras · {completedCount} completadas
+          {activeGPs.length} carreras
+          {completedCount > 0 && ` · ${completedCount} completadas`}
+          {pastCount > 0 && ` · ${pastCount} disputadas`}
         </p>
       </div>
 
@@ -122,7 +125,9 @@ export default async function CalendarPage() {
             href={`/gp/${gp.id}`}
             className={cn(
               "rounded-lg border px-4 py-3.5 flex items-start gap-3 transition-colors",
-              isNext
+              gp.cancelled
+                ? "border-zinc-800/50 bg-zinc-900/40 opacity-60"
+                : isNext
                 ? "border-amber-700/60 bg-amber-950/20 hover:border-amber-600/60"
                 : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
             )}
@@ -137,10 +142,10 @@ export default async function CalendarPage() {
                   <img
                     src={gp.countryFlag}
                     alt={gp.country}
-                    className="w-5 h-3.5 object-cover rounded-sm shrink-0"
+                    className={cn("w-5 h-3.5 object-cover rounded-sm shrink-0", gp.cancelled && "grayscale")}
                   />
                 )}
-                <p className="font-medium text-white text-sm truncate">{gp.name}</p>
+                <p className={cn("font-medium text-sm truncate", gp.cancelled ? "text-zinc-500 line-through" : "text-white")}>{gp.name}</p>
                 {isNext && gp.status === "upcoming" && (
                   <Badge className="shrink-0 bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
                     Próximo
@@ -156,12 +161,15 @@ export default async function CalendarPage() {
               </p>
             </div>
             <div className="shrink-0 pt-0.5">
-              {gp.status === "open" && (
+              {gp.cancelled && (
+                <Badge className="bg-red-950/50 text-red-400/70 border border-red-900/40 text-xs">No disponible</Badge>
+              )}
+              {!gp.cancelled && gp.status === "open" && (
                 <Badge className="bg-green-700/30 text-green-400 border border-green-700/50 text-xs">
                   Abierto
                 </Badge>
               )}
-              {isNext && gp.status === "upcoming" && (
+              {!gp.cancelled && isNext && gp.status === "upcoming" && (
                 <div className="text-right">
                   <GPCountdown
                     deadline={new Date(gp.predictionDeadline).toISOString()}
@@ -169,13 +177,16 @@ export default async function CalendarPage() {
                   />
                 </div>
               )}
-              {!isNext && gp.status === "upcoming" && (
+              {!gp.cancelled && !isNext && gp.status === "upcoming" && (
                 <Badge className="bg-zinc-800 text-zinc-600 text-xs">Próximo</Badge>
               )}
-              {gp.status === "closed" && (
+              {!gp.cancelled && gp.status === "closed" && (
                 <Badge className="bg-zinc-800 text-zinc-400 text-xs">Cerrado</Badge>
               )}
-              {gp.status === "completed" && (
+              {!gp.cancelled && gp.status === "past" && (
+                <Badge className="bg-zinc-800 text-zinc-500 text-xs">Sin resultado</Badge>
+              )}
+              {!gp.cancelled && gp.status === "completed" && (
                 <Badge className="bg-zinc-800 text-zinc-400 text-xs">Completado</Badge>
               )}
             </div>

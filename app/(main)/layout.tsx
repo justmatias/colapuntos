@@ -2,7 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Types } from "mongoose";
-import { LayoutDashboard, CalendarDays, Users, UserCircle } from "lucide-react";
+
 import { auth } from "@/lib/auth";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/lib/models/User";
@@ -25,10 +25,10 @@ export default async function MainLayout({
     .lean();
 
   const navLinks = [
-    { href: "/dashboard", label: "Dashboard", show: true, icon: LayoutDashboard },
-    { href: "/calendar", label: "Calendario", show: true, icon: CalendarDays },
-    { href: "/drivers", label: "Pilotos", show: true, icon: Users },
-    { href: "/profile", label: "Perfil", show: true, icon: UserCircle },
+    { href: "/dashboard", label: "Dashboard", show: true, icon: "LayoutDashboard" as const },
+    { href: "/calendar", label: "Calendario", show: true, icon: "CalendarDays" as const },
+    { href: "/drivers", label: "Pilotos", show: true, icon: "Users" as const },
+    { href: "/profile", label: "Perfil", show: true, icon: "UserCircle" as const },
   ];
 
   return (

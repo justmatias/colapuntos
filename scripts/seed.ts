@@ -36,6 +36,7 @@ const GrandPrixSchema = new mongoose.Schema(
       enum: ["upcoming", "open", "closed", "completed"],
       default: "upcoming",
     },
+    cancelled: { type: Boolean, default: false },
     meetingKey: { type: Number },
     raceSessionKey: { type: Number },
     countryFlag: { type: String },
@@ -46,10 +47,22 @@ const GrandPrixSchema = new mongoose.Schema(
 );
 GrandPrixSchema.index({ season: 1, round: 1 }, { unique: true });
 
+const RaceResultSchema = new mongoose.Schema(
+  {
+    grandPrix: { type: mongoose.Schema.Types.ObjectId, ref: "GrandPrix", required: true, unique: true },
+    p1: { type: mongoose.Schema.Types.ObjectId, ref: "Driver", required: true },
+    p2: { type: mongoose.Schema.Types.ObjectId, ref: "Driver", required: true },
+    p3: { type: mongoose.Schema.Types.ObjectId, ref: "Driver", required: true },
+  },
+  { timestamps: true }
+);
+
 const Driver =
   mongoose.models.Driver ?? mongoose.model("Driver", DriverSchema);
 const GrandPrix =
   mongoose.models.GrandPrix ?? mongoose.model("GrandPrix", GrandPrixSchema);
+const RaceResult =
+  mongoose.models.RaceResult ?? mongoose.model("RaceResult", RaceResultSchema);
 
 // ── OpenF1 types ──────────────────────────────────────────────────────────────
 
@@ -253,6 +266,136 @@ async function seedCalendar(season: number) {
   );
 }
 
+// ── Seed past results ─────────────────────────────────────────────────────────
+// For each past GP: fetch podium from OpenF1 and store it.
+// If no data is available (no raceSessionKey or empty results), mark as cancelled.
+
+interface OpenF1SessionResult {
+  position: number;
+  driver_number: number;
+}
+
+async function seedPastResults(season: number) {
+  console.log(`\nSyncing past race results for ${season}…`);
+
+  // Use 3h buffer so a race that just ended has time to appear in OpenF1
+  const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
+
+  const pastGPs = await GrandPrix.find({
+    season,
+    raceDate: { $lte: cutoff },
+  })
+    .sort({ round: 1 })
+    .lean();
+
+  let synced = 0;
+  let alreadyDone = 0;
+  let cancelled = 0;
+  let skipped = 0;
+
+  for (const gp of pastGPs) {
+    // No race session in OpenF1 → cancelled
+    if (!gp.raceSessionKey) {
+      if (!gp.cancelled) {
+        await GrandPrix.findByIdAndUpdate(gp._id, { cancelled: true });
+        console.log(`  ⛔ R${gp.round} ${gp.name}: sin raceSessionKey → no disponible`);
+        cancelled++;
+      }
+      continue;
+    }
+
+    // Already has a result → skip (don't overwrite manually-entered results)
+    const existing = await RaceResult.findOne({ grandPrix: gp._id }).lean();
+    if (existing) {
+      alreadyDone++;
+      continue;
+    }
+
+    // Fetch from OpenF1
+    let results: OpenF1SessionResult[];
+    try {
+      const res = await fetch(
+        `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}&position<=3`
+      );
+      if (!res.ok) {
+        if (!gp.cancelled) {
+          await GrandPrix.findByIdAndUpdate(gp._id, { cancelled: true });
+          console.log(`  ⛔ R${gp.round} ${gp.name}: API error ${res.status} → no disponible`);
+          cancelled++;
+        }
+        continue;
+      }
+      results = (await res.json()) as OpenF1SessionResult[];
+    } catch {
+      console.log(`  ⚠  R${gp.round} ${gp.name}: error de red (se reintentará en próximo seed)`);
+      skipped++;
+      continue;
+    }
+
+    if (results.length === 0) {
+      if (!gp.cancelled) {
+        await GrandPrix.findByIdAndUpdate(gp._id, { cancelled: true });
+        console.log(`  ⛔ R${gp.round} ${gp.name}: sin resultados en OpenF1 → no disponible`);
+        cancelled++;
+      }
+      continue;
+    }
+
+    const byPosition = new Map<number, number>();
+    for (const r of results) {
+      if (!byPosition.has(r.position)) byPosition.set(r.position, r.driver_number);
+    }
+
+    const p1num = byPosition.get(1);
+    const p2num = byPosition.get(2);
+    const p3num = byPosition.get(3);
+
+    if (!p1num || !p2num || !p3num) {
+      console.log(`  ⚠  R${gp.round} ${gp.name}: podio incompleto`);
+      skipped++;
+      continue;
+    }
+
+    const driverDocs = await Driver.find({
+      season,
+      number: { $in: [p1num, p2num, p3num] },
+    })
+      .select("code number")
+      .lean();
+
+    const driverByNum = new Map(driverDocs.map((d) => [d.number as number, d]));
+
+    const p1 = driverByNum.get(p1num);
+    const p2 = driverByNum.get(p2num);
+    const p3 = driverByNum.get(p3num);
+
+    if (!p1 || !p2 || !p3) {
+      console.log(
+        `  ⚠  R${gp.round} ${gp.name}: pilotos no encontrados (${[p1num, p2num, p3num].join(", ")})`
+      );
+      skipped++;
+      continue;
+    }
+
+    await RaceResult.findOneAndUpdate(
+      { grandPrix: gp._id },
+      { p1: p1._id, p2: p2._id, p3: p3._id },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    await GrandPrix.findByIdAndUpdate(gp._id, { status: "completed" });
+
+    console.log(`  ✓  R${gp.round} ${gp.name}: P1 ${p1.code}, P2 ${p2.code}, P3 ${p3.code}`);
+    synced++;
+  }
+
+  const parts = [];
+  if (synced) parts.push(`${synced} sincronizados`);
+  if (alreadyDone) parts.push(`${alreadyDone} ya tenían resultado`);
+  if (cancelled) parts.push(`${cancelled} marcados como no disponibles`);
+  if (skipped) parts.push(`${skipped} omitidos (error de red, reintentar)`);
+  console.log(`  → ${parts.join(", ") || "nada que hacer"}`);
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -266,6 +409,7 @@ async function main() {
   try {
     await seedDrivers(2026);
     await seedCalendar(2026);
+    await seedPastResults(2026);
   } finally {
     await mongoose.disconnect();
     console.log("\nDone. Disconnected from MongoDB.");

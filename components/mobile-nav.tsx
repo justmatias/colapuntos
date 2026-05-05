@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, type LucideIcon } from "lucide-react";
+import { Menu, LayoutDashboard, CalendarDays, Users, UserCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,11 +9,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+const iconMap = {
+  LayoutDashboard,
+  CalendarDays,
+  Users,
+  UserCircle,
+} as const;
+
+type IconName = keyof typeof iconMap;
+
 interface NavLink {
   href: string;
   label: string;
   show: boolean;
-  icon?: LucideIcon;
+  icon?: IconName;
 }
 
 interface MobileNavProps {
@@ -39,7 +48,7 @@ export function MobileNav({ links }: MobileNavProps) {
       >
         {visible.map((link) => {
           const isActive = pathname.startsWith(link.href);
-          const Icon = link.icon;
+          const Icon = link.icon ? iconMap[link.icon] : null;
           return (
             <DropdownMenuItem
               key={link.href}

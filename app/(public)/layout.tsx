@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { LayoutDashboard, CalendarDays, Users, UserCircle } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,14 +14,14 @@ export default async function PublicLayout({
 
   const navLinks = session
     ? [
-        { href: "/calendar", label: "Calendario", show: true, icon: CalendarDays },
-        { href: "/drivers", label: "Pilotos", show: true, icon: Users },
-        { href: "/dashboard", label: "Dashboard", show: true, icon: LayoutDashboard },
-        { href: "/profile", label: "Perfil", show: true, icon: UserCircle },
+        { href: "/calendar", label: "Calendario", show: true, icon: "CalendarDays" as const },
+        { href: "/drivers", label: "Pilotos", show: true, icon: "Users" as const },
+        { href: "/dashboard", label: "Dashboard", show: true, icon: "LayoutDashboard" as const },
+        { href: "/profile", label: "Perfil", show: true, icon: "UserCircle" as const },
       ]
     : [
-        { href: "/calendar", label: "Calendario", show: true, icon: CalendarDays },
-        { href: "/drivers", label: "Pilotos", show: true, icon: Users },
+        { href: "/calendar", label: "Calendario", show: true, icon: "CalendarDays" as const },
+        { href: "/drivers", label: "Pilotos", show: true, icon: "Users" as const },
       ];
 
   return (

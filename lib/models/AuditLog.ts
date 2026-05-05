@@ -1,6 +1,6 @@
 import { Schema, model, models, type Document, type Types } from "mongoose";
 
-export type AuditAction = "save_result" | "sync_result" | "remove_participant" | "regenerate_invite";
+export type AuditAction = "save_result" | "sync_result" | "remove_participant" | "regenerate_invite" | "save_retroactive_prediction" | "gp_cancelled" | "gp_uncancelled";
 
 export interface IAuditLog extends Document {
   user: Types.ObjectId;
@@ -19,7 +19,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
     grandPrix: { type: Schema.Types.ObjectId, ref: "GrandPrix" },
     action: {
       type: String,
-      enum: ["save_result", "sync_result", "remove_participant", "regenerate_invite"],
+      enum: ["save_result", "sync_result", "remove_participant", "regenerate_invite", "save_retroactive_prediction", "gp_cancelled", "gp_uncancelled"],
       required: true,
     },
     details: { type: String, required: true },

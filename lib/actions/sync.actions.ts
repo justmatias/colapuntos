@@ -37,11 +37,13 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
   const gp = await GrandPrix.findById(gpId).lean();
   if (!gp) return { success: false, error: "Gran Premio no encontrado" };
 
-  if (!gp.raceSessionKey)
-    return { success: false, error: "Este GP no tiene raceSessionKey (datos no disponibles en OpenF1)" };
-
   if (new Date() < new Date(gp.raceDate))
     return { success: false, error: "La carrera aún no se ha disputado" };
+
+  if (!gp.raceSessionKey) {
+    await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
+    return { success: true, updated: true, details: "GP marcado como no disponible: sin sesión de carrera en OpenF1" };
+  }
 
   let results: OpenF1SessionResult[];
   try {
@@ -49,18 +51,18 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
       `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}&position<=3`
     );
     if (!res.ok) {
-      return {
-        success: false,
-        error: `OpenF1 API error ${res.status} para session_key=${gp.raceSessionKey}`,
-      };
+      await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
+      return { success: true, updated: true, details: `GP marcado como no disponible: API error ${res.status}` };
     }
     results = (await res.json()) as OpenF1SessionResult[];
   } catch {
     return { success: false, error: "Error al consultar la API de OpenF1" };
   }
 
-  if (results.length === 0)
-    return { success: false, error: "La API no devolvió resultados para esta sesión" };
+  if (results.length === 0) {
+    await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
+    return { success: true, updated: true, details: "GP marcado como no disponible: la API no devolvió resultados" };
+  }
 
   const byPosition = new Map<number, OpenF1SessionResult>();
   for (const r of results) {
@@ -143,6 +145,7 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
 
 export async function syncAllPendingResults(): Promise<{
   synced: number;
+  cancelled: number;
   errors: string[];
 }> {
   await connectDB();
@@ -151,20 +154,24 @@ export async function syncAllPendingResults(): Promise<{
 
   const gps = await GrandPrix.find({
     raceDate: { $lte: cutoff },
-    raceSessionKey: { $exists: true },
     status: { $ne: "completed" },
+    cancelled: { $ne: true },
   })
-    .select("_id")
+    .select("_id raceSessionKey")
     .lean();
 
   const errors: string[] = [];
   let synced = 0;
+  let cancelled = 0;
 
   for (const gp of gps) {
     const result = await syncRaceResultsForGP(gp._id.toString());
-    if (result.success && result.updated) synced++;
+    if (result.success && result.updated) {
+      if (result.details.includes("no disponible")) cancelled++;
+      else synced++;
+    }
     if (!result.success) errors.push(`GP ${gp._id}: ${result.error}`);
   }
 
-  return { synced, errors };
+  return { synced, cancelled, errors };
 }
