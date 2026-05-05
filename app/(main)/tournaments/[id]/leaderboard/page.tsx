@@ -87,6 +87,7 @@ async function getLeaderboardData(tournamentId: string, userId: string) {
       bestGP: bestGP ? { name: bestGP.gpName, points: bestGP.points } : null,
       worstGP: worstGP ? { name: worstGP.gpName, points: worstGP.points } : null,
       gpScores,
+      streak: computeStreak(gpScores),
     };
   });
 
@@ -98,6 +99,19 @@ async function getLeaderboardData(tournamentId: string, userId: string) {
   // Build cumulative chart data: one point per completed GP
   const scoredGPIds = new Set(scores.map((s) => s.grandPrix.toString()));
   const completedGPs = gps.filter((g) => scoredGPIds.has(g._id.toString()));
+
+  const finishedGPs = gps.filter((g) => g.status === "completed");
+
+  function computeStreak(gpScores: GPScore[]): number {
+    const scoreByGpId = new Map(gpScores.map((s) => [s.gpId, s.points]));
+    let streak = 0;
+    for (let i = finishedGPs.length - 1; i >= 0; i--) {
+      const pts = scoreByGpId.get(finishedGPs[i]._id.toString()) ?? 0;
+      if (pts > 0) streak++;
+      else break;
+    }
+    return streak;
+  }
 
   const chartData: Record<string, number | string>[] = completedGPs.map((gp) => {
     const point: Record<string, number | string> = {

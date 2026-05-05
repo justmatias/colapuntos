@@ -30,6 +30,7 @@ export type LeaderboardEntry = {
   bestGP: { name: string; points: number } | null;
   worstGP: { name: string; points: number } | null;
   gpScores: GPScore[];
+  streak: number;
 };
 
 const CHART_COLORS = [
@@ -124,6 +125,7 @@ export function LeaderboardClient({
                 <th className="px-4 py-3 text-right hidden sm:table-cell">Prom.</th>
                 <th className="px-4 py-3 text-right hidden md:table-cell">Mejor GP</th>
                 <th className="px-4 py-3 text-right hidden md:table-cell">Peor GP</th>
+                <th className="px-4 py-3 text-right hidden sm:table-cell">Racha</th>
                 <th className="px-4 py-3 text-right font-bold">Pts</th>
                 <th className="px-4 py-3 w-8"></th>
               </tr>
@@ -172,6 +174,13 @@ export function LeaderboardClient({
                         <span className="text-zinc-600">—</span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right hidden sm:table-cell">
+                      {entry.streak > 0 ? (
+                        <span className="text-orange-400 font-medium">🔥 {entry.streak}</span>
+                      ) : (
+                        <span className="text-zinc-600">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right font-bold text-white">
                       {entry.total}
                     </td>
@@ -186,7 +195,7 @@ export function LeaderboardClient({
 
                   {expandedUser === entry.userId && entry.gpScores.length > 0 && (
                     <tr className="border-b border-zinc-800">
-                      <td colSpan={8} className="px-6 py-4 bg-zinc-900/70">
+                      <td colSpan={9} className="px-6 py-4 bg-zinc-900/70">
                         <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-3">
                           Desglose por carrera
                         </p>

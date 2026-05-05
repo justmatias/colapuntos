@@ -127,6 +127,21 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
   await GrandPrix.findByIdAndUpdate(gpId, { status: "completed" });
   await recalculateScoresForGP(gpId);
 
+  try {
+    const weatherRes = await fetch(`${BASE_URL}/weather?session_key=${gp.raceSessionKey}`);
+    if (weatherRes.ok) {
+      const weatherData = (await weatherRes.json()) as { rainfall: number }[];
+      if (weatherData.length > 0) {
+        const wetCount = weatherData.filter((w) => w.rainfall > 0).length;
+        const ratio = wetCount / weatherData.length;
+        const weatherCondition = ratio === 0 ? "dry" : ratio > 0.5 ? "wet" : "mixed";
+        await GrandPrix.findByIdAndUpdate(gpId, { weatherCondition });
+      }
+    }
+  } catch {
+    // weather fetch is best-effort, don't block sync
+  }
+
   const codes = [p1num, p2num, p3num].map(
     (n) => driverByNum.get(n)?.code ?? `#${n}`
   );

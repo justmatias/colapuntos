@@ -18,6 +18,7 @@ export interface IGrandPrix extends Document {
   countryFlag?: string;
   circuitImage?: string;
   gmtOffset?: string;
+  weatherCondition?: "dry" | "wet" | "mixed";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +44,7 @@ const GrandPrixSchema = new Schema<IGrandPrix>(
     countryFlag: { type: String },
     circuitImage: { type: String },
     gmtOffset: { type: String },
+    weatherCondition: { type: String, enum: ["dry", "wet", "mixed"] },
   },
   { timestamps: true }
 );

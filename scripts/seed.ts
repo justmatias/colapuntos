@@ -42,6 +42,7 @@ const GrandPrixSchema = new mongoose.Schema(
     countryFlag: { type: String },
     circuitImage: { type: String },
     gmtOffset: { type: String },
+    weatherCondition: { type: String, enum: ["dry", "wet", "mixed"] },
   },
   { timestamps: true }
 );
@@ -266,6 +267,24 @@ async function seedCalendar(season: number) {
   );
 }
 
+// ── Weather helper ────────────────────────────────────────────────────────────
+
+async function fetchWeatherCondition(
+  raceSessionKey: number
+): Promise<"dry" | "wet" | "mixed" | null> {
+  try {
+    const res = await fetch(`${BASE_URL}/weather?session_key=${raceSessionKey}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { rainfall: number }[];
+    if (data.length === 0) return null;
+    const wetCount = data.filter((w) => w.rainfall > 0).length;
+    const ratio = wetCount / data.length;
+    return ratio === 0 ? "dry" : ratio > 0.5 ? "wet" : "mixed";
+  } catch {
+    return null;
+  }
+}
+
 // ── Seed past results ─────────────────────────────────────────────────────────
 // For each past GP: fetch podium from OpenF1 and store it.
 // If no data is available (no raceSessionKey or empty results), mark as cancelled.
@@ -304,9 +323,16 @@ async function seedPastResults(season: number) {
       continue;
     }
 
-    // Already has a result → skip (don't overwrite manually-entered results)
+    // Already has a result → skip result sync but backfill weather if missing
     const existing = await RaceResult.findOne({ grandPrix: gp._id }).lean();
     if (existing) {
+      if (!gp.weatherCondition) {
+        const wc = await fetchWeatherCondition(gp.raceSessionKey);
+        if (wc) {
+          await GrandPrix.findByIdAndUpdate(gp._id, { weatherCondition: wc });
+          console.log(`  🌦  R${gp.round} ${gp.name}: weather → ${wc}`);
+        }
+      }
       alreadyDone++;
       continue;
     }
@@ -382,9 +408,14 @@ async function seedPastResults(season: number) {
       { p1: p1._id, p2: p2._id, p3: p3._id },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
-    await GrandPrix.findByIdAndUpdate(gp._id, { status: "completed" });
+    const wc = await fetchWeatherCondition(gp.raceSessionKey);
+    await GrandPrix.findByIdAndUpdate(gp._id, {
+      status: "completed",
+      ...(wc ? { weatherCondition: wc } : {}),
+    });
 
-    console.log(`  ✓  R${gp.round} ${gp.name}: P1 ${p1.code}, P2 ${p2.code}, P3 ${p3.code}`);
+    const weatherTag = wc ? ` [${wc}]` : "";
+    console.log(`  ✓  R${gp.round} ${gp.name}: P1 ${p1.code}, P2 ${p2.code}, P3 ${p3.code}${weatherTag}`);
     synced++;
   }
 

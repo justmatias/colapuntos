@@ -15,6 +15,18 @@ const STATUS_ICON: Record<string, string> = {
   cancelled: "⛔",
 };
 
+const WEATHER_EMOJI: Record<"dry" | "wet" | "mixed", string> = {
+  dry: "☀️",
+  wet: "🌧️",
+  mixed: "🌦️",
+};
+
+const WEATHER_LABEL: Record<"dry" | "wet" | "mixed", string> = {
+  dry: "Carrera seca",
+  wet: "Carrera mojada",
+  mixed: "Carrera mixta",
+};
+
 function computeStatus(
   predictionDeadline: Date,
   raceDate: Date,
@@ -53,6 +65,7 @@ async function getCalendarData() {
     countryFlag: gp.countryFlag,
     circuitImage: gp.circuitImage,
     cancelled: gp.cancelled ?? false,
+    weatherCondition: gp.weatherCondition,
     status: gp.cancelled
       ? "cancelled"
       : computeStatus(
@@ -146,6 +159,11 @@ export default async function CalendarPage() {
                   />
                 )}
                 <p className={cn("font-medium text-sm truncate", gp.cancelled ? "text-zinc-500 line-through" : "text-white")}>{gp.name}</p>
+                {gp.weatherCondition && !gp.cancelled && (
+                  <span className="text-sm shrink-0" title={WEATHER_LABEL[gp.weatherCondition as "dry" | "wet" | "mixed"]}>
+                    {WEATHER_EMOJI[gp.weatherCondition as "dry" | "wet" | "mixed"]}
+                  </span>
+                )}
                 {isNext && gp.status === "upcoming" && (
                   <Badge className="shrink-0 bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
                     Próximo
