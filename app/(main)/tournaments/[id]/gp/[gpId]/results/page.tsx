@@ -217,6 +217,30 @@ export default async function ResultsPage({
         </div>
       )}
 
+      {isPostDeadline && !result && new Date() > new Date(gp.raceDate) && (() => {
+        const estimatedAt = new Date(new Date(gp.raceDate).getTime() + 5 * 60 * 60 * 1000);
+        const isPast = estimatedAt < new Date();
+        const timeStr = new Intl.DateTimeFormat("es-AR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: gp.timezone,
+          timeZoneName: "short",
+        }).format(estimatedAt);
+        return (
+          <div className="flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800/50 px-4 py-3">
+            <span className="text-lg">⏳</span>
+            <div>
+              <p className="font-medium text-sm text-zinc-300">Resultados pendientes</p>
+              <p className="text-xs text-zinc-500">
+                {isPast
+                  ? "Sincronizando resultados, volvé en unos minutos…"
+                  : `Disponibles aproximadamente a las ${timeStr}`}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
       {isPostDeadline && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Predicciones del grupo</h2>

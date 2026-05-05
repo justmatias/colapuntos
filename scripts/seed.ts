@@ -39,6 +39,7 @@ const GrandPrixSchema = new mongoose.Schema(
     cancelled: { type: Boolean, default: false },
     meetingKey: { type: Number },
     raceSessionKey: { type: Number },
+    qualifyingSessionKey: { type: Number },
     countryFlag: { type: String },
     circuitImage: { type: String },
     gmtOffset: { type: String },
@@ -173,7 +174,16 @@ async function fetchOpenF1<T>(path: string): Promise<T> {
 
 async function seedDrivers(season: number) {
   console.log(`\nFetching drivers for season ${season}…`);
-  const drivers = await fetchOpenF1<OpenF1Driver[]>(`/drivers?session_key=latest`);
+  // Resolve the most recent past Race session so we get the correct season roster.
+  // session_key=latest can resolve to a session from a different season during the offseason.
+  const raceSessions = await fetchOpenF1<OpenF1Session[]>(`/sessions?year=${season}&session_type=Race`);
+  const pastRace = raceSessions
+    .filter((s) => new Date(s.date_start) < new Date())
+    .sort((a, b) => new Date(b.date_start).getTime() - new Date(a.date_start).getTime())[0];
+  const endpoint = pastRace
+    ? `/drivers?session_key=${pastRace.session_key}`
+    : `/drivers?session_key=latest`;
+  const drivers = await fetchOpenF1<OpenF1Driver[]>(endpoint);
 
   let upserted = 0;
   for (const d of drivers) {
@@ -221,12 +231,28 @@ async function seedCalendar(season: number) {
     raceSessions.map((s) => [s.meeting_key, s])
   );
 
+  const qualSessions = sessions.filter((s) => s.session_type === "Qualifying");
+  const qualByMeeting = new Map<number, OpenF1Session>(
+    qualSessions.map((s) => [s.meeting_key, s])
+  );
+
+  // Exclude pre-season testing events; sort chronologically so round numbers are stable.
+  const raceWeekends = meetings
+    .filter((m) => !/pre.?season|testing/i.test(m.meeting_name))
+    .sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+
+  if (raceWeekends.length === 0) {
+    console.log(`  ⚠ No race weekends found for ${season}, skipping`);
+    return;
+  }
+
   let upserted = 0;
   let provisional = 0;
 
-  for (let i = 0; i < meetings.length; i++) {
-    const m = meetings[i];
+  for (let i = 0; i < raceWeekends.length; i++) {
+    const m = raceWeekends[i];
     const raceSession = raceByMeeting.get(m.meeting_key);
+    const qualSession = qualByMeeting.get(m.meeting_key);
     const timezone = resolveTimezone(m.country_code, m.circuit_short_name);
 
     // Use race session date if available, otherwise fall back to meeting date_start
@@ -252,6 +278,7 @@ async function seedCalendar(season: number) {
         predictionDeadline,
         meetingKey: m.meeting_key,
         ...(raceSession ? { raceSessionKey: raceSession.session_key } : {}),
+        ...(qualSession ? { qualifyingSessionKey: qualSession.session_key } : {}),
         countryFlag: m.country_flag ?? undefined,
         circuitImage: m.circuit_image ?? undefined,
         gmtOffset: raceSession?.gmt_offset ?? m.gmt_offset,
@@ -292,6 +319,9 @@ async function fetchWeatherCondition(
 interface OpenF1SessionResult {
   position: number;
   driver_number: number;
+  dnf?: boolean;
+  dns?: boolean;
+  dsq?: boolean;
 }
 
 async function seedPastResults(season: number) {
@@ -337,18 +367,16 @@ async function seedPastResults(season: number) {
       continue;
     }
 
-    // Fetch from OpenF1
+    // Fetch from OpenF1 — no position filter so we can skip DSQ/DNS drivers
     let results: OpenF1SessionResult[];
     try {
       const res = await fetch(
-        `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}&position<=3`
+        `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}`
       );
       if (!res.ok) {
-        if (!gp.cancelled) {
-          await GrandPrix.findByIdAndUpdate(gp._id, { cancelled: true });
-          console.log(`  ⛔ R${gp.round} ${gp.name}: API error ${res.status} → no disponible`);
-          cancelled++;
-        }
+        // Transient API error — do not cancel, retry on next seed run
+        console.log(`  ⚠  R${gp.round} ${gp.name}: API error ${res.status} (se reintentará en próximo seed)`);
+        skipped++;
         continue;
       }
       results = (await res.json()) as OpenF1SessionResult[];
@@ -367,14 +395,14 @@ async function seedPastResults(season: number) {
       continue;
     }
 
-    const byPosition = new Map<number, number>();
-    for (const r of results) {
-      if (!byPosition.has(r.position)) byPosition.set(r.position, r.driver_number);
-    }
+    // Build classified podium: sorted by position, excluding disqualified/DNS drivers
+    const classified = results
+      .filter((r) => !r.dsq && !r.dns)
+      .sort((a, b) => a.position - b.position);
 
-    const p1num = byPosition.get(1);
-    const p2num = byPosition.get(2);
-    const p3num = byPosition.get(3);
+    const p1num = classified[0]?.driver_number;
+    const p2num = classified[1]?.driver_number;
+    const p3num = classified[2]?.driver_number;
 
     if (!p1num || !p2num || !p3num) {
       console.log(`  ⚠  R${gp.round} ${gp.name}: podio incompleto`);

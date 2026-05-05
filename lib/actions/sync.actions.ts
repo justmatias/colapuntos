@@ -16,6 +16,9 @@ const BASE_URL = "https://api.openf1.org/v1";
 interface OpenF1SessionResult {
   position: number;
   driver_number: number;
+  dnf?: boolean;
+  dns?: boolean;
+  dsq?: boolean;
 }
 
 type SyncResult =
@@ -51,11 +54,11 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
   let results: OpenF1SessionResult[];
   try {
     const res = await fetch(
-      `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}&position<=3`
+      `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}`
     );
     if (!res.ok) {
-      await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
-      return { success: true, updated: true, details: `GP marcado como no disponible: API error ${res.status}` };
+      // Transient API error — do not cancel; caller can retry
+      return { success: false, error: `OpenF1 API error ${res.status} — intente de nuevo más tarde` };
     }
     results = (await res.json()) as OpenF1SessionResult[];
   } catch {
@@ -67,18 +70,14 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
     return { success: true, updated: true, details: "GP marcado como no disponible: la API no devolvió resultados" };
   }
 
-  const byPosition = new Map<number, OpenF1SessionResult>();
-  for (const r of results) {
-    if (!byPosition.has(r.position)) byPosition.set(r.position, r);
-  }
+  // Build classified podium: sorted by position, excluding disqualified/DNS drivers
+  const classified = results
+    .filter((r) => !r.dsq && !r.dns)
+    .sort((a, b) => a.position - b.position);
 
-  function getDriverNum(pos: number): number | null {
-    return byPosition.get(pos)?.driver_number ?? null;
-  }
-
-  const p1num = getDriverNum(1);
-  const p2num = getDriverNum(2);
-  const p3num = getDriverNum(3);
+  const p1num = classified[0]?.driver_number ?? null;
+  const p2num = classified[1]?.driver_number ?? null;
+  const p3num = classified[2]?.driver_number ?? null;
 
   if (!p1num || !p2num || !p3num)
     return { success: false, error: "Faltan posiciones del podio en la respuesta de la API" };
@@ -165,7 +164,7 @@ export async function syncAllPendingResults(): Promise<{
 }> {
   await connectDB();
 
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
 
   const gps = await GrandPrix.find({
     raceDate: { $lte: cutoff },
