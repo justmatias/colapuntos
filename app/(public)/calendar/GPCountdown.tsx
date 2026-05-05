@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { DateTime } from "luxon";
 
 interface Props {
-  deadline: string; // ISO date string
+  deadline: string;
   timezone: string;
 }
 
@@ -12,23 +12,34 @@ export function GPCountdown({ deadline, timezone }: Props) {
   const [mounted, setMounted] = useState(false);
   const [parts, setParts] = useState<{ days: number; hours: number; minutes: number } | null>(null);
   const [expired, setExpired] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     function tick() {
-      const now = DateTime.now();
-      const target = DateTime.fromISO(deadline, { zone: timezone });
-      const diff = target.diff(now, ["days", "hours", "minutes"]);
+      try {
+        const target = DateTime.fromISO(deadline, { zone: timezone });
+        if (!target.isValid) {
+          setError(true);
+          return;
+        }
 
-      if (diff.milliseconds <= 0) {
-        setExpired(true);
-        return;
+        const now = DateTime.now();
+        const diffMs = target.toMillis() - now.toMillis();
+
+        if (diffMs <= 0) {
+          setExpired(true);
+          return;
+        }
+
+        const totalMinutes = Math.floor(diffMs / 60_000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+
+        setParts({ days, hours, minutes });
+      } catch {
+        setError(true);
       }
-
-      setParts({
-        days: Math.floor(diff.days),
-        hours: Math.floor(diff.hours),
-        minutes: Math.floor(Math.round(diff.minutes)),
-      });
     }
 
     tick();
@@ -38,6 +49,8 @@ export function GPCountdown({ deadline, timezone }: Props) {
   }, [deadline, timezone]);
 
   if (!mounted) return <span className="text-zinc-500 text-xs">—</span>;
+
+  if (error) return <span className="text-zinc-500 text-xs">—</span>;
 
   if (expired) return <span className="text-zinc-500 text-xs">Cerrado</span>;
 

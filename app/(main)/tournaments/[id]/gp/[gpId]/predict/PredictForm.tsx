@@ -46,7 +46,7 @@ function DriverRow({ driver }: { driver: DriverOption }) {
       {driver.teamColour && (
         <span
           className="w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: `#${driver.teamColour}` }}
+          style={{ backgroundColor: driver.teamColour }}
         />
       )}
       <span className="font-mono text-xs text-zinc-500 w-5 text-right">
@@ -163,15 +163,20 @@ export function PredictForm({
 
         {POSITIONS.map((pos, i) => (
           <div key={pos.label} className={`rounded-lg border p-4 ${pos.borderClass}`}>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-1">
               <span className="font-bold text-sm text-zinc-300">{pos.label}</span>
               <span className="text-xs text-zinc-500">
                 {pos.points} pts si acertás exacto · 3 pts si está en el podio
               </span>
             </div>
             <Select value={selections[i]} onValueChange={setters[i]}>
-              <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600">
-                <SelectValue placeholder="Elegí un piloto" />
+              <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600 w-full">
+                <SelectValue placeholder="Elegí un piloto">
+                  {(() => {
+                    const d = driverMap.get(selections[i]);
+                    return d ? <DriverRow driver={d} /> : null;
+                  })()}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="bg-zinc-900 border-zinc-700 text-white">
                 {drivers.map((d) => (

@@ -105,7 +105,7 @@ export function LeaderboardClient({
       <div className="flex justify-end">
         <button
           onClick={handleShare}
-          className="text-sm text-zinc-400 hover:text-white transition-colors border border-zinc-700 rounded-md px-3 py-1.5"
+          className="text-sm text-zinc-400 hover:text-white transition-colors border border-zinc-700 rounded-md px-3 py-1.5 w-full sm:w-auto"
         >
           {copied ? "¡Copiado!" : "Compartir mi posición"}
         </button>
@@ -300,7 +300,7 @@ export function LeaderboardClient({
               <select
                 value={h2hA}
                 onChange={(e) => setH2hA(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-600"
+                className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-600 w-full sm:w-auto max-w-48 truncate"
               >
                 {entries.map((e) => (
                   <option key={e.userId} value={e.userId}>
@@ -312,7 +312,7 @@ export function LeaderboardClient({
               <select
                 value={h2hB}
                 onChange={(e) => setH2hB(e.target.value)}
-                className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-600"
+                className="bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-red-600 w-full sm:w-auto max-w-48 truncate"
               >
                 {entries.map((e) => (
                   <option key={e.userId} value={e.userId}>

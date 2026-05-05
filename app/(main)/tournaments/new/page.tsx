@@ -55,12 +55,11 @@ export default function NewTournamentPage() {
 
         <div className="space-y-1.5">
           <Label htmlFor="season" className="text-zinc-300">Temporada</Label>
-          <Select name="season" defaultValue="2025">
-            <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600">
+          <Select name="season" defaultValue="2026">
+            <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600 w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-zinc-900 border-zinc-700 text-white">
-              <SelectItem value="2025">2025</SelectItem>
               <SelectItem value="2026">2026</SelectItem>
             </SelectContent>
           </Select>

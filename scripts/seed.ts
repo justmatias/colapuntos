@@ -264,8 +264,7 @@ async function main() {
   console.log("Connected.");
 
   try {
-    await seedDrivers(2025);
-    await seedCalendar(2025);
+    await seedDrivers(2026);
     await seedCalendar(2026);
   } finally {
     await mongoose.disconnect();

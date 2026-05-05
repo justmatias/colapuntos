@@ -109,7 +109,7 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
     if (!selectedGP) return;
     setSyncMsg("");
     startSyncing(async () => {
-      const result = await syncRaceResultsForGP(selectedGP);
+      const result = await syncRaceResultsForGP(selectedGP, tournamentId);
       if (result.success) {
         setSyncMsg(result.details);
         router.refresh();
@@ -134,7 +134,7 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
       <div>
         <label className="text-sm text-zinc-400 mb-1.5 block">Gran Premio</label>
         <Select value={selectedGP} onValueChange={(v) => setSelectedGP(v ?? "")}>
-          <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600">
+          <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600 w-full">
             <SelectValue placeholder="Seleccioná un Gran Premio" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-700 text-white">
@@ -203,7 +203,7 @@ export function ResultsForm({ tournamentId, gps, drivers }: Props) {
                 {pos.label}
               </label>
               <Select value={selections[i]} onValueChange={setters[i]}>
-                <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600">
+          <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white focus:ring-red-600 w-full">
                   <SelectValue placeholder="Seleccioná piloto" />
                 </SelectTrigger>
                 <SelectContent className="bg-zinc-900 border-zinc-700 text-white">

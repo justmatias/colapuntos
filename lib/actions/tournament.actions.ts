@@ -24,7 +24,7 @@ async function getSession() {
 
 const CreateSchema = z.object({
   name: z.string().min(3, "El nombre debe tener al menos 3 caracteres").max(50),
-  season: z.coerce.number().int().min(2025).max(2026),
+  season: z.coerce.number().int().min(2026).max(2026),
 });
 
 export async function createTournament(

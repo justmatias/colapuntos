@@ -1,35 +1,29 @@
 import Link from "next/link";
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { Types } from "mongoose";
 import { LayoutDashboard, CalendarDays, Users, UserCircle } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { connectDB } from "@/lib/db/mongoose";
-import { User } from "@/lib/models/User";
-import { UserMenu } from "@/components/user-menu";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { MobileNav } from "@/components/mobile-nav";
 
-export default async function MainLayout({
+export default async function PublicLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/login");
 
-  const { user } = session;
-
-  await connectDB();
-  const dbUser = await User.findById(new Types.ObjectId(user.id))
-    .select("favoriteDriverHeadshot")
-    .lean();
-
-  const navLinks = [
-    { href: "/dashboard", label: "Dashboard", show: true, icon: LayoutDashboard },
-    { href: "/calendar", label: "Calendario", show: true, icon: CalendarDays },
-    { href: "/drivers", label: "Pilotos", show: true, icon: Users },
-    { href: "/profile", label: "Perfil", show: true, icon: UserCircle },
-  ];
+  const navLinks = session
+    ? [
+        { href: "/calendar", label: "Calendario", show: true, icon: CalendarDays },
+        { href: "/drivers", label: "Pilotos", show: true, icon: Users },
+        { href: "/dashboard", label: "Dashboard", show: true, icon: LayoutDashboard },
+        { href: "/profile", label: "Perfil", show: true, icon: UserCircle },
+      ]
+    : [
+        { href: "/calendar", label: "Calendario", show: true, icon: CalendarDays },
+        { href: "/drivers", label: "Pilotos", show: true, icon: Users },
+      ];
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -51,15 +45,32 @@ export default async function MainLayout({
                 {link.label}
               </Link>
             ))}
+            {!session && (
+              <Link
+                href="/login"
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "bg-red-600 hover:bg-red-700 text-white font-semibold"
+                )}
+              >
+                Ingresar
+              </Link>
+            )}
           </nav>
 
           <div className="flex items-center gap-2">
             <MobileNav links={navLinks} />
-            <UserMenu
-              name={user.name}
-              email={user.email}
-              headshotUrl={dbUser?.favoriteDriverHeadshot ?? undefined}
-            />
+            {!session && (
+              <Link
+                href="/login"
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "sm:hidden bg-red-600 hover:bg-red-700 text-white font-semibold"
+                )}
+              >
+                Ingresar
+              </Link>
+            )}
           </div>
         </div>
       </header>

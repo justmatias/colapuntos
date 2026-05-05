@@ -9,6 +9,7 @@ import { GrandPrix } from '@/lib/models/GrandPrix';
 import { Score } from '@/lib/models/Score';
 import { RaceResult } from '@/lib/models/RaceResult';
 import { User } from '@/lib/models/User';
+import { GPCountdown } from '@/app/(public)/calendar/GPCountdown';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -124,6 +125,8 @@ async function getTournamentData(tournamentId: string, userId: string) {
 		circuit: gp.circuit,
 		raceDate: gp.raceDate,
 		predictionDeadline: gp.predictionDeadline,
+		countryFlag: gp.countryFlag,
+		timezone: gp.timezone,
 		status: computeStatus(
 			new Date(gp.predictionDeadline),
 			new Date(gp.raceDate),
@@ -167,7 +170,7 @@ export default async function TournamentPage({
 	return (
 		<div className='space-y-8'>
 			{/* Header */}
-			<div className='flex items-start justify-between gap-4 flex-wrap'>
+			<div className='flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4'>
 				<div>
 					<h1 className='text-2xl font-bold'>{tournament.name}</h1>
 					<p className='text-zinc-400 text-sm mt-0.5'>
@@ -223,7 +226,7 @@ export default async function TournamentPage({
 							<TableRow className='border-zinc-800 hover:bg-transparent'>
 								<TableHead className='text-zinc-400 w-12'>#</TableHead>
 								<TableHead className='text-zinc-400'>Jugador</TableHead>
-								<TableHead className='text-zinc-400 text-right'>GPs</TableHead>
+								<TableHead className='text-zinc-400 text-right hidden sm:table-cell'>GPs</TableHead>
 								<TableHead className='text-zinc-400 text-right'>
 									Puntos
 								</TableHead>
@@ -244,7 +247,7 @@ export default async function TournamentPage({
 											<span className='ml-2 text-xs text-zinc-500'>(vos)</span>
 										)}
 									</TableCell>
-									<TableCell className='text-zinc-400 text-right'>
+									<TableCell className='text-zinc-400 text-right hidden sm:table-cell'>
 										{row.gpsPlayed}
 									</TableCell>
 									<TableCell className='text-right font-bold text-white'>
@@ -261,39 +264,87 @@ export default async function TournamentPage({
 			<section>
 				<h2 className='text-lg font-semibold mb-3'>Calendario</h2>
 				<div className='space-y-2'>
-					{gpList.map((gp) => (
-						<Link
-							key={gp.id}
-							href={`/tournaments/${tournament.id}/gp/${gp.id}/predict`}
-							className='flex items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3 hover:border-zinc-700 transition-colors'
-						>
-							<span className='text-zinc-600 font-mono text-sm w-6 text-center'>
-								{gp.round}
-							</span>
-							<span className='text-lg'>{STATUS_ICON[gp.status]}</span>
-							<div className='flex-1 min-w-0'>
-								<p className='font-medium text-white truncate'>{gp.name}</p>
-								<p className='text-xs text-zinc-500'>
-									{new Date(gp.raceDate).toLocaleDateString('es-AR', {
-										day: 'numeric',
-										month: 'short',
-									})}
-									{' — '}
-									{gp.circuit}
-								</p>
+					{gpList.map((gp) => {
+						const isNext = nextGP?.id === gp.id;
+						return (
+							<div
+								key={gp.id}
+								className={cn(
+									'flex items-center gap-4 rounded-lg border px-4 py-3 transition-colors',
+									isNext
+										? 'border-amber-700/60 bg-amber-950/20 hover:border-amber-600/60'
+										: 'border-zinc-800 bg-zinc-900 hover:border-zinc-700',
+								)}
+							>
+								<span className='text-zinc-600 font-mono text-sm w-6 text-center'>
+									{gp.round}
+								</span>
+								<span className='text-lg'>{STATUS_ICON[gp.status]}</span>
+								<Link
+									href={`/tournaments/${tournament.id}/gp/${gp.id}/predict`}
+									className='flex-1 min-w-0'
+								>
+									<div className="flex items-center gap-2">
+										{gp.countryFlag && (
+											<img
+												src={gp.countryFlag}
+												alt={gp.country}
+												className="w-4 h-3 object-cover rounded-sm shrink-0"
+											/>
+										)}
+										<p className='font-medium text-white truncate'>{gp.name}</p>
+										{isNext && gp.status === 'upcoming' && (
+											<Badge className="shrink-0 bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
+												Próximo
+											</Badge>
+										)}
+									</div>
+									<p className='text-xs text-zinc-500'>
+										{new Date(gp.raceDate).toLocaleDateString('es-AR', {
+											day: 'numeric',
+											month: 'short',
+										})}
+										{' — '}
+										{gp.circuit}
+									</p>
+								</Link>
+								<Link
+									href={`/gp/${gp.id}`}
+									className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 hidden sm:inline"
+								>
+									Ver GP ↗
+								</Link>
+								{gp.status === 'open' && (
+									<Badge className='bg-green-700/30 text-green-400 border border-green-700/50 text-xs shrink-0 hidden sm:inline-flex'>
+										Abierto
+									</Badge>
+								)}
+								{isNext && gp.status === 'upcoming' && (
+									<div className="shrink-0">
+										<GPCountdown
+											deadline={new Date(gp.predictionDeadline).toISOString()}
+											timezone={gp.timezone}
+										/>
+									</div>
+								)}
+								{!isNext && gp.status === 'upcoming' && (
+									<Badge className='bg-zinc-800 text-zinc-600 text-xs shrink-0 hidden sm:inline-flex'>
+										Próximo
+									</Badge>
+								)}
+								{gp.status === 'closed' && (
+									<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
+										Cerrado
+									</Badge>
+								)}
+								{gp.status === 'completed' && (
+									<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
+										Completado
+									</Badge>
+								)}
 							</div>
-							{gp.status === 'open' && (
-								<Badge className='bg-green-700/30 text-green-400 border border-green-700/50 text-xs shrink-0'>
-									Abierto
-								</Badge>
-							)}
-							{gp.status === 'closed' && (
-								<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0'>
-									Cerrado
-								</Badge>
-							)}
-						</Link>
-					))}
+						);
+					})}
 				</div>
 			</section>
 		</div>

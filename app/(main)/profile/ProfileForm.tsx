@@ -117,7 +117,7 @@ export function ProfileForm({
           <Input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="bg-zinc-950 border-zinc-700 text-white max-w-xs"
+            className="bg-zinc-950 border-zinc-700 text-white w-full sm:max-w-xs"
           />
           <Button
             onClick={handleSaveName}
@@ -141,7 +141,7 @@ export function ProfileForm({
           onValueChange={handleSelectDriver}
           disabled={savingDriver}
         >
-          <SelectTrigger className="bg-zinc-950 border-zinc-700 text-white max-w-xs">
+          <SelectTrigger className="bg-zinc-950 border-zinc-700 text-white w-full sm:max-w-xs">
             <SelectValue placeholder="Seleccionar piloto" />
           </SelectTrigger>
           <SelectContent className="bg-zinc-900 border-zinc-700 text-white max-h-60">

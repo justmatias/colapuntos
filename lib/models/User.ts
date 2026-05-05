@@ -18,7 +18,7 @@ const UserSchema = new Schema<IUser>(
     favoriteDriverCode: { type: String, uppercase: true },
     favoriteDriverHeadshot: { type: String },
   },
-  { timestamps: true }
+  { timestamps: true, collection: "user" }
 );
 
 export const User = models.User ?? model<IUser>("User", UserSchema);

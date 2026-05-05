@@ -23,9 +23,15 @@ export async function updateProfileName(
     }
 
     await connectDB();
-    await User.findByIdAndUpdate(new Types.ObjectId(session.user.id), {
-      name: name.trim(),
-    });
+    const result = await User.findByIdAndUpdate(
+      new Types.ObjectId(session.user.id),
+      { name: name.trim() },
+      { new: true }
+    );
+
+    if (!result) {
+      return { success: false, error: "Usuario no encontrado" };
+    }
 
     return { success: true };
   } catch (err) {
@@ -52,10 +58,18 @@ export async function updateFavoriteDriver(
     }).lean();
     if (!driver) return { success: false, error: "Piloto no encontrado" };
 
-    await User.findByIdAndUpdate(new Types.ObjectId(session.user.id), {
-      favoriteDriverCode: driver.code,
-      favoriteDriverHeadshot: driver.headshotUrl ?? undefined,
-    });
+    const updated = await User.findByIdAndUpdate(
+      new Types.ObjectId(session.user.id),
+      {
+        favoriteDriverCode: driver.code,
+        favoriteDriverHeadshot: driver.headshotUrl ?? undefined,
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return { success: false, error: "Usuario no encontrado" };
+    }
 
     return { success: true };
   } catch (err) {

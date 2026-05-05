@@ -56,7 +56,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Mis torneos</h1>
         <div className="flex gap-2">
           <Link href="/tournaments/join" className={buttonVariants({ variant: "outline", size: "sm" })}>
@@ -89,7 +89,7 @@ export default async function DashboardPage() {
       {tournaments.length === 0 ? (
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-6 py-12 text-center">
           <p className="text-zinc-400 mb-4">Todavía no pertenecés a ningún torneo.</p>
-          <div className="flex justify-center gap-3">
+          <div className="flex justify-center gap-3 flex-wrap">
             <Link href="/tournaments/join" className={buttonVariants({ variant: "outline" })}>
               Unirme con código
             </Link>

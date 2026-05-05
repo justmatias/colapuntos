@@ -1,11 +1,14 @@
 "use server";
 
+import { headers } from "next/headers";
 import { Types } from "mongoose";
+import { auth } from "@/lib/auth";
 import { connectDB } from "@/lib/db/mongoose";
 import { GrandPrix } from "@/lib/models/GrandPrix";
 import { RaceResult } from "@/lib/models/RaceResult";
 import { Driver } from "@/lib/models/Driver";
 import { AuditLog } from "@/lib/models/AuditLog";
+import { Tournament } from "@/lib/models/Tournament";
 import { recalculateScoresForGP } from "@/lib/actions/scoring.actions";
 
 const BASE_URL = "https://api.openf1.org/v1";
@@ -19,7 +22,16 @@ type SyncResult =
   | { success: true; updated: boolean; details: string }
   | { success: false; error: string };
 
-export async function syncRaceResultsForGP(gpId: string): Promise<SyncResult> {
+export async function syncRaceResultsForGP(gpId: string, tournamentId?: string): Promise<SyncResult> {
+  if (tournamentId !== undefined) {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session) return { success: false, error: "No autenticado" };
+    await connectDB();
+    const tournament = await Tournament.findById(tournamentId).lean();
+    if (!tournament || tournament.creator.toString() !== session.user.id)
+      return { success: false, error: "Solo el creador puede sincronizar resultados" };
+  }
+
   await connectDB();
 
   const gp = await GrandPrix.findById(gpId).lean();

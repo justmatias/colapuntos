@@ -1,10 +1,9 @@
-import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
+import Link from "next/link";
 import { connectDB } from "@/lib/db/mongoose";
 import { GrandPrix } from "@/lib/models/GrandPrix";
 import { RaceResult } from "@/lib/models/RaceResult";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { GPCountdown } from "./GPCountdown";
 
 const STATUS_ICON: Record<string, string> = {
@@ -66,9 +65,6 @@ async function getCalendarData() {
 }
 
 export default async function CalendarPage() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) redirect("/login");
-
   const gpList = await getCalendarData();
   const season = new Date().getFullYear();
 
@@ -85,11 +81,16 @@ export default async function CalendarPage() {
       </div>
 
       {nextGP && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+        <div className="rounded-lg border border-amber-700/50 bg-amber-950/20 px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <span className="text-2xl">{STATUS_ICON[nextGP.status]}</span>
             <div>
-              <p className="text-sm text-zinc-400">Próxima carrera</p>
+              <div className="flex items-center gap-2 mb-0.5">
+                <p className="text-sm text-zinc-400">Próxima carrera</p>
+                <Badge className="bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
+                  Siguiente
+                </Badge>
+              </div>
               <p className="font-semibold text-white">
                 R{nextGP.round} — {nextGP.name}
               </p>
@@ -113,17 +114,39 @@ export default async function CalendarPage() {
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {gpList.map((gp) => (
-          <div
+        {gpList.map((gp) => {
+          const isNext = nextGP?.id === gp.id;
+          return (
+          <Link
             key={gp.id}
-            className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3.5 flex items-start gap-3 hover:border-zinc-700 transition-colors"
+            href={`/gp/${gp.id}`}
+            className={cn(
+              "rounded-lg border px-4 py-3.5 flex items-start gap-3 transition-colors",
+              isNext
+                ? "border-amber-700/60 bg-amber-950/20 hover:border-amber-600/60"
+                : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+            )}
           >
             <div className="shrink-0 flex flex-col items-center gap-0.5">
               <span className="text-zinc-600 font-mono text-xs">{gp.round}</span>
               <span className="text-lg">{STATUS_ICON[gp.status]}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-white text-sm truncate">{gp.name}</p>
+              <div className="flex items-center gap-2">
+                {gp.countryFlag && (
+                  <img
+                    src={gp.countryFlag}
+                    alt={gp.country}
+                    className="w-5 h-3.5 object-cover rounded-sm shrink-0"
+                  />
+                )}
+                <p className="font-medium text-white text-sm truncate">{gp.name}</p>
+                {isNext && gp.status === "upcoming" && (
+                  <Badge className="shrink-0 bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
+                    Próximo
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-zinc-500 truncate">{gp.circuit}</p>
               <p className="text-xs text-zinc-500 mt-0.5">
                 {new Date(gp.raceDate).toLocaleDateString("es-AR", {
@@ -131,11 +154,6 @@ export default async function CalendarPage() {
                   month: "short",
                 })}
               </p>
-              {gp.countryFlag && (
-                <span className="text-xs text-zinc-600 block mt-1">
-                  {gp.countryFlag} {gp.country}
-                </span>
-              )}
             </div>
             <div className="shrink-0 pt-0.5">
               {gp.status === "open" && (
@@ -143,13 +161,16 @@ export default async function CalendarPage() {
                   Abierto
                 </Badge>
               )}
-              {gp.status === "upcoming" && (
+              {isNext && gp.status === "upcoming" && (
                 <div className="text-right">
                   <GPCountdown
                     deadline={new Date(gp.predictionDeadline).toISOString()}
                     timezone={gp.timezone}
                   />
                 </div>
+              )}
+              {!isNext && gp.status === "upcoming" && (
+                <Badge className="bg-zinc-800 text-zinc-600 text-xs">Próximo</Badge>
               )}
               {gp.status === "closed" && (
                 <Badge className="bg-zinc-800 text-zinc-400 text-xs">Cerrado</Badge>
@@ -158,8 +179,9 @@ export default async function CalendarPage() {
                 <Badge className="bg-zinc-800 text-zinc-400 text-xs">Completado</Badge>
               )}
             </div>
-          </div>
-        ))}
+          </Link>
+          );
+        })}
       </div>
     </div>
   );
