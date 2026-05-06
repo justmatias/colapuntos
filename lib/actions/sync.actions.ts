@@ -46,9 +46,27 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
   if (gp.status === "completed")
     return { success: true, updated: false, details: "GP ya procesado" };
 
+  if (gp.cancelled)
+    return { success: false, error: "GP cancelado" };
+
+  // Verify cancellation status directly from OpenF1 before syncing
+  if (gp.meetingKey) {
+    try {
+      const meetingRes = await fetch(`${BASE_URL}/meetings?meeting_key=${gp.meetingKey}`);
+      if (meetingRes.ok) {
+        const meetings = (await meetingRes.json()) as { is_cancelled: boolean }[];
+        if (meetings.length > 0 && meetings[0].is_cancelled) {
+          await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
+          return { success: false, error: "GP cancelado según OpenF1" };
+        }
+      }
+    } catch {
+      // best-effort check, continue
+    }
+  }
+
   if (!gp.raceSessionKey) {
-    await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
-    return { success: true, updated: true, details: "GP marcado como no disponible: sin sesión de carrera en OpenF1" };
+    return { success: false, error: "Sin sesión de carrera en OpenF1 — se reintentará" };
   }
 
   let results: OpenF1SessionResult[];
@@ -57,7 +75,7 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
       `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}`
     );
     if (!res.ok) {
-      // Transient API error — do not cancel; caller can retry
+      // Transient API error — caller can retry
       return { success: false, error: `OpenF1 API error ${res.status} — intente de nuevo más tarde` };
     }
     results = (await res.json()) as OpenF1SessionResult[];
@@ -66,8 +84,7 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
   }
 
   if (results.length === 0) {
-    await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
-    return { success: true, updated: true, details: "GP marcado como no disponible: la API no devolvió resultados" };
+    return { success: false, error: "OpenF1 aún no tiene resultados — se reintentará" };
   }
 
   // Build classified podium: sorted by position, excluding disqualified/DNS drivers
@@ -159,7 +176,7 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
 
 export async function syncAllPendingResults(): Promise<{
   synced: number;
-  cancelled: number;
+  skipped: number;
   errors: string[];
 }> {
   await connectDB();
@@ -176,16 +193,17 @@ export async function syncAllPendingResults(): Promise<{
 
   const errors: string[] = [];
   let synced = 0;
-  let cancelled = 0;
+  let skipped = 0;
 
   for (const gp of gps) {
     const result = await syncRaceResultsForGP(gp._id.toString());
     if (result.success && result.updated) {
-      if (result.details.includes("no disponible")) cancelled++;
-      else synced++;
+      synced++;
+    } else if (!result.success) {
+      skipped++;
+      errors.push(`GP ${gp._id}: ${result.error}`);
     }
-    if (!result.success) errors.push(`GP ${gp._id}: ${result.error}`);
   }
 
-  return { synced, cancelled, errors };
+  return { synced, skipped, errors };
 }

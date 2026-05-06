@@ -40,6 +40,7 @@ const GrandPrixSchema = new mongoose.Schema(
     meetingKey: { type: Number },
     raceSessionKey: { type: Number },
     qualifyingSessionKey: { type: Number },
+    sprintSessionKey: { type: Number },
     countryFlag: { type: String },
     circuitImage: { type: String },
     gmtOffset: { type: String },
@@ -78,7 +79,9 @@ interface OpenF1Meeting {
   circuit_image?: string;
   location: string;
   date_start: string;
+  date_end: string;
   gmt_offset: string;
+  is_cancelled: boolean;
 }
 
 interface OpenF1Session {
@@ -89,6 +92,7 @@ interface OpenF1Session {
   date_start: string;
   date_end: string;
   gmt_offset: string;
+  is_cancelled: boolean;
 }
 
 interface OpenF1Driver {
@@ -174,11 +178,11 @@ async function fetchOpenF1<T>(path: string): Promise<T> {
 
 async function seedDrivers(season: number) {
   console.log(`\nFetching drivers for season ${season}…`);
-  // Resolve the most recent past Race session so we get the correct season roster.
+  // Resolve the most recent past main Race session so we get the correct season roster.
   // session_key=latest can resolve to a session from a different season during the offseason.
   const raceSessions = await fetchOpenF1<OpenF1Session[]>(`/sessions?year=${season}&session_type=Race`);
   const pastRace = raceSessions
-    .filter((s) => new Date(s.date_start) < new Date())
+    .filter((s) => s.session_name === "Race" && new Date(s.date_start) < new Date())
     .sort((a, b) => new Date(b.date_start).getTime() - new Date(a.date_start).getTime())[0];
   const endpoint = pastRace
     ? `/drivers?session_key=${pastRace.session_key}`
@@ -210,7 +214,7 @@ async function seedDrivers(season: number) {
 }
 
 // ── Seed calendar ─────────────────────────────────────────────────────────────
-// Uses race session date when available; falls back to meeting date_start for
+// Uses race session date when available; falls back to meeting date_end for
 // provisional calendars where sessions haven't been scheduled yet.
 
 async function seedCalendar(season: number) {
@@ -226,9 +230,19 @@ async function seedCalendar(season: number) {
     return;
   }
 
-  const raceSessions = sessions.filter((s) => s.session_type === "Race");
+  // Distinguish main Race from Sprint using session_name
+  const mainRaceSessions = sessions.filter(
+    (s) => s.session_type === "Race" && s.session_name === "Race"
+  );
+  const sprintSessions = sessions.filter(
+    (s) => s.session_type === "Race" && s.session_name === "Sprint"
+  );
+
   const raceByMeeting = new Map<number, OpenF1Session>(
-    raceSessions.map((s) => [s.meeting_key, s])
+    mainRaceSessions.map((s) => [s.meeting_key, s])
+  );
+  const sprintByMeeting = new Map<number, OpenF1Session>(
+    sprintSessions.map((s) => [s.meeting_key, s])
   );
 
   const qualSessions = sessions.filter((s) => s.session_type === "Qualifying");
@@ -256,22 +270,28 @@ async function seedCalendar(season: number) {
 
   let upserted = 0;
   let provisional = 0;
+  let cancelledCount = 0;
   const validMeetingKeys = raceWeekends.map((m) => m.meeting_key);
 
   for (let i = 0; i < raceWeekends.length; i++) {
     const m = raceWeekends[i];
     const raceSession = raceByMeeting.get(m.meeting_key);
+    const sprintSession = sprintByMeeting.get(m.meeting_key);
     const qualSession = qualByMeeting.get(m.meeting_key);
     const timezone = resolveTimezone(m.country_code, m.circuit_short_name);
 
-    // Use race session date if available, otherwise fall back to meeting date_start
-    const raceDateStr = raceSession?.date_start ?? m.date_start;
+    // Use race session date if available, otherwise fall back to meeting date_end
+    const raceDateStr = raceSession?.date_start ?? m.date_end;
     const raceDate = new Date(raceDateStr);
     const predictionDeadline = computeDeadline(raceDateStr, timezone);
 
     if (!raceSession) {
       provisional++;
-      console.log(`  ~ Round ${i + 1}: ${m.meeting_name} (no race session yet, using meeting date)`);
+      console.log(`  ~ Round ${i + 1}: ${m.meeting_name} (no race session yet, using meeting date_end)`);
+    }
+
+    if (m.is_cancelled) {
+      cancelledCount++;
     }
 
     // Use meetingKey as the stable identifier so the same GP document (ObjectId) is
@@ -289,7 +309,9 @@ async function seedCalendar(season: number) {
         raceDate,
         predictionDeadline,
         meetingKey: m.meeting_key,
+        cancelled: m.is_cancelled,
         ...(raceSession ? { raceSessionKey: raceSession.session_key } : {}),
+        ...(sprintSession ? { sprintSessionKey: sprintSession.session_key } : {}),
         ...(qualSession ? { qualifyingSessionKey: qualSession.session_key } : {}),
         countryFlag: m.country_flag ?? undefined,
         circuitImage: m.circuit_image ?? undefined,
@@ -311,7 +333,8 @@ async function seedCalendar(season: number) {
 
   console.log(
     `  ✓ ${upserted} grands prix upserted` +
-      (provisional > 0 ? ` (${provisional} provisional — no race session yet)` : "")
+      (provisional > 0 ? ` (${provisional} provisional — no race session yet)` : "") +
+      (cancelledCount > 0 ? ` · ${cancelledCount} cancelado(s)` : "")
   );
 }
 
@@ -335,7 +358,8 @@ async function fetchWeatherCondition(
 
 // ── Seed past results ─────────────────────────────────────────────────────────
 // For each past GP: fetch podium from OpenF1 and store it.
-// If no data is available (no raceSessionKey or empty results), mark as cancelled.
+// Only trust OpenF1's is_cancelled flag for cancellations — never infer
+// cancellation from missing results or raceSessionKey.
 
 interface OpenF1SessionResult {
   position: number;
@@ -360,17 +384,19 @@ async function seedPastResults(season: number) {
 
   let synced = 0;
   let alreadyDone = 0;
-  let cancelled = 0;
   let skipped = 0;
 
   for (const gp of pastGPs) {
-    // No race session in OpenF1 → cancelled
+    // Trust OpenF1's is_cancelled flag only (set during seedCalendar)
+    if (gp.cancelled) {
+      alreadyDone++;
+      continue;
+    }
+
+    // No race session yet → wait for next seed run
     if (!gp.raceSessionKey) {
-      if (!gp.cancelled) {
-        await GrandPrix.findByIdAndUpdate(gp._id, { cancelled: true });
-        console.log(`  ⛔ R${gp.round} ${gp.name}: sin raceSessionKey → no disponible`);
-        cancelled++;
-      }
+      console.log(`  ⚠  R${gp.round} ${gp.name}: sin raceSessionKey (se reintentará)`);
+      skipped++;
       continue;
     }
 
@@ -395,7 +421,7 @@ async function seedPastResults(season: number) {
         `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}`
       );
       if (!res.ok) {
-        // Transient API error — do not cancel, retry on next seed run
+        // Transient API error — retry on next seed run
         console.log(`  ⚠  R${gp.round} ${gp.name}: API error ${res.status} (se reintentará en próximo seed)`);
         skipped++;
         continue;
@@ -408,11 +434,9 @@ async function seedPastResults(season: number) {
     }
 
     if (results.length === 0) {
-      if (!gp.cancelled) {
-        await GrandPrix.findByIdAndUpdate(gp._id, { cancelled: true });
-        console.log(`  ⛔ R${gp.round} ${gp.name}: sin resultados en OpenF1 → no disponible`);
-        cancelled++;
-      }
+      // Results not yet available in OpenF1 — retry on next seed run
+      console.log(`  ⚠  R${gp.round} ${gp.name}: sin resultados en OpenF1 (se reintentará)`);
+      skipped++;
       continue;
     }
 
@@ -470,9 +494,8 @@ async function seedPastResults(season: number) {
 
   const parts = [];
   if (synced) parts.push(`${synced} sincronizados`);
-  if (alreadyDone) parts.push(`${alreadyDone} ya tenían resultado`);
-  if (cancelled) parts.push(`${cancelled} marcados como no disponibles`);
-  if (skipped) parts.push(`${skipped} omitidos (error de red, reintentar)`);
+  if (alreadyDone) parts.push(`${alreadyDone} ya tenían resultado / cancelados`);
+  if (skipped) parts.push(`${skipped} omitidos (reintentar)`);
   console.log(`  → ${parts.join(", ") || "nada que hacer"}`);
 }
 

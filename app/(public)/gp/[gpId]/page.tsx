@@ -22,7 +22,15 @@ interface OpenF1SessionResult {
   driver_number: number;
 }
 
-const SESSION_TYPE_ICON: Record<string, string> = {
+interface OpenF1StartingGrid {
+  position: number;
+  driver_number: number;
+  lap_duration: number;
+  meeting_key: number;
+  session_key: number;
+}
+
+const SESSION_NAME_ICON: Record<string, string> = {
   Race: "🏁",
   Qualifying: "⏱",
   Sprint: "⚡",
@@ -33,8 +41,8 @@ const SESSION_TYPE_ICON: Record<string, string> = {
   "Practice 3": "🔧",
 };
 
-function sessionIcon(type: string): string {
-  return SESSION_TYPE_ICON[type] ?? "📋";
+function sessionIcon(name: string): string {
+  return SESSION_NAME_ICON[name] ?? "📋";
 }
 
 async function getGPData(gpId: string) {
@@ -108,6 +116,38 @@ async function getGPData(gpId: string) {
     })
   );
 
+  // Fetch starting grid for the race session
+  let startingGrid: (OpenF1StartingGrid & {
+    code?: string;
+    fullName?: string;
+    team?: string;
+    teamColour?: string;
+  })[] = [];
+  if (gp.raceSessionKey) {
+    try {
+      const res = await fetch(
+        `${BASE_URL}/starting_grid?session_key=${gp.raceSessionKey}`
+      );
+      if (res.ok) {
+        const raw = (await res.json()) as OpenF1StartingGrid[];
+        startingGrid = raw
+          .sort((a, b) => a.position - b.position)
+          .map((r) => {
+            const driver = driverByNum.get(r.driver_number);
+            return {
+              ...r,
+              code: driver?.code ?? `#${r.driver_number}`,
+              fullName: driver?.fullName ?? `Driver #${r.driver_number}`,
+              team: driver?.team,
+              teamColour: driver?.teamColour,
+            };
+          });
+      }
+    } catch {
+      // Silently skip failed starting grid fetch
+    }
+  }
+
   return {
     gp: {
       id: gp._id.toString(),
@@ -122,6 +162,7 @@ async function getGPData(gpId: string) {
       circuitImage: gp.circuitImage,
     },
     sessions: sessionsWithResults,
+    startingGrid,
   };
 }
 
@@ -137,6 +178,12 @@ function formatDateTime(dateStr: string, timezone: string): string {
   });
 }
 
+function formatLapDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = (seconds % 60).toFixed(3);
+  return `${mins}:${secs.padStart(6, "0")}`;
+}
+
 export default async function GPDetailPage({
   params,
 }: {
@@ -146,7 +193,7 @@ export default async function GPDetailPage({
   const data = await getGPData(gpId);
   if (!data) notFound();
 
-  const { gp, sessions } = data;
+  const { gp, sessions, startingGrid } = data;
 
   return (
     <div className="space-y-6">
@@ -194,6 +241,36 @@ export default async function GPDetailPage({
         </div>
       </div>
 
+      {startingGrid.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-white">Parrilla de salida</h2>
+          <Card className="border-zinc-800 bg-zinc-900/80 overflow-hidden">
+            <div className="divide-y divide-zinc-800">
+              {startingGrid.map((r) => (
+                <div
+                  key={r.position}
+                  className="flex items-center gap-3 px-4 py-2"
+                >
+                  <span className="w-6 text-center font-mono font-bold text-zinc-400 text-sm">
+                    {r.position}
+                  </span>
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: r.teamColour ?? "#666" }}
+                  />
+                  <span className="text-white font-medium text-sm truncate">
+                    {r.fullName}
+                  </span>
+                  <span className="text-zinc-500 text-xs ml-auto">
+                    {r.lap_duration ? formatLapDuration(r.lap_duration) : "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </section>
+      )}
+
       {sessions.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-lg font-semibold text-white">Sesiones</h2>
@@ -204,7 +281,7 @@ export default async function GPDetailPage({
                 className="px-4 py-3 border-zinc-800 bg-zinc-900/80"
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">{sessionIcon(s.session_type)}</span>
+                  <span className="text-lg">{sessionIcon(s.session_name)}</span>
                   <div>
                     <p className="font-medium text-white text-sm">
                       {s.session_name}

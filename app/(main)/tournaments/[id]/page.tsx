@@ -50,7 +50,8 @@ function computeStatus(
 ): string {
 	if (hasResult) return 'completed';
 	const now = new Date();
-	if (raceDate < now) return 'past';
+	// 4-hour buffer after raceDate so a race that just finished doesn't immediately flip to "past"
+	if (new Date(raceDate.getTime() + 4 * 60 * 60 * 1000) < now) return 'past';
 	if (predictionDeadline < now) return 'closed';
 	const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 	if (predictionDeadline <= in48h) return 'open';

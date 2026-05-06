@@ -16,6 +16,7 @@ export interface IGrandPrix extends Document {
   meetingKey?: number;
   raceSessionKey?: number;
   qualifyingSessionKey?: number;
+  sprintSessionKey?: number;
   countryFlag?: string;
   circuitImage?: string;
   gmtOffset?: string;
@@ -43,6 +44,7 @@ const GrandPrixSchema = new Schema<IGrandPrix>(
     meetingKey: { type: Number },
     raceSessionKey: { type: Number },
     qualifyingSessionKey: { type: Number },
+    sprintSessionKey: { type: Number },
     countryFlag: { type: String },
     circuitImage: { type: String },
     gmtOffset: { type: String },
