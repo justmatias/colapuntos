@@ -142,7 +142,7 @@ function computeDeadline(raceDateUtc: string, timezone: string): Date {
 // ── Seed drivers ──────────────────────────────────────────────────────────────
 
 async function seedDrivers(season: number) {
-  console.log(`\nFetching drivers for season ${season}…`);
+  console.log(`\n▶ Cargando drivers para temporada ${season}…`);
   // Resolve the most recent past main Race session so we get the correct season roster.
   // session_key=latest can resolve to a session from a different season during the offseason.
   const raceSessions = await fetchSessionsForYear(season);
@@ -152,11 +152,17 @@ async function seedDrivers(season: number) {
   const endpoint = pastRace
     ? `/drivers?session_key=${pastRace.session_key}`
     : `/drivers?session_key=latest`;
+  console.log(`  · Fuente: ${endpoint}${pastRace ? ` (sesión ${pastRace.session_key} — ${pastRace.session_name})` : ""}`);
   const drivers = await fetchOpenF1<OpenF1Driver[]>(endpoint);
+  console.log(`  · ${drivers.length} drivers recibidos de OpenF1`);
 
   let upserted = 0;
+  let skipped = 0;
   for (const d of drivers) {
-    if (!d.name_acronym || !d.driver_number) continue;
+    if (!d.name_acronym || !d.driver_number) {
+      skipped++;
+      continue;
+    }
     await Driver.findOneAndUpdate(
       { code: d.name_acronym.toUpperCase(), season },
       {
@@ -175,7 +181,7 @@ async function seedDrivers(season: number) {
     );
     upserted++;
   }
-  console.log(`  ✓ ${upserted} drivers upserted`);
+  console.log(`  ✓ ${upserted} drivers upserted${skipped ? ` (${skipped} omitidos por datos incompletos)` : ""}`);
 }
 
 // ── Seed calendar ─────────────────────────────────────────────────────────────
@@ -183,15 +189,14 @@ async function seedDrivers(season: number) {
 // provisional calendars where sessions haven't been scheduled yet.
 
 async function seedCalendar(season: number) {
-  console.log(`\nFetching calendar for ${season} from OpenF1…`);
+  console.log(`\n▶ Cargando calendario ${season} desde OpenF1…`);
 
-  const [meetings, sessions] = await Promise.all([
-    fetchMeetings(season),
-    fetchSessionsForYear(season),
-  ]);
+  const meetings = await fetchMeetings(season);
+  const sessions = await fetchSessionsForYear(season);
+  console.log(`  · ${meetings.length} meetings y ${sessions.length} sesiones recibidos`);
 
   if (meetings.length === 0) {
-    console.log(`  ⚠ No meetings found for ${season}, skipping`);
+    console.log(`  ⚠ No se encontraron meetings para ${season}, salteando`);
     return;
   }
 
@@ -221,9 +226,13 @@ async function seedCalendar(season: number) {
     .sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
 
   if (raceWeekends.length === 0) {
-    console.log(`  ⚠ No race weekends found for ${season}, skipping`);
+    console.log(`  ⚠ No se encontraron fines de semana de carrera para ${season}, salteando`);
     return;
   }
+  console.log(
+    `  · ${raceWeekends.length} fines de semana válidos · ` +
+      `${mainRaceSessions.length} carreras · ${qualSessions.length} clasificaciones · ${sprintSessions.length} sprints`
+  );
 
   // Temporarily shift all existing round numbers into the 90000+ range so the
   // (season, round) unique index never conflicts when we re-assign rounds below.
@@ -250,9 +259,22 @@ async function seedCalendar(season: number) {
     const raceDate = new Date(raceDateStr);
     const predictionDeadline = computeDeadline(raceDateStr, timezone);
 
+    const sessionTags = [
+      raceSession ? `R:${raceSession.session_key}` : null,
+      qualSession ? `Q:${qualSession.session_key}` : null,
+      sprintSession ? `S:${sprintSession.session_key}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    console.log(
+      `  · R${i + 1} ${m.meeting_name} (${m.country_code}/${m.circuit_short_name}) ` +
+        `tz=${timezone} race=${raceDate.toISOString()} [${sessionTags || "sin sesiones"}]` +
+        (m.is_cancelled ? " ✗ cancelado" : "") +
+        (!raceSession ? " ~ provisional" : "")
+    );
+
     if (!raceSession) {
       provisional++;
-      console.log(`  ~ Round ${i + 1}: ${m.meeting_name} (no race session yet, using meeting date_end)`);
     }
 
     if (m.is_cancelled) {
@@ -309,7 +331,7 @@ async function seedCalendar(season: number) {
 // Only trust OpenF1's is_cancelled flag for cancellations.
 
 async function seedPastResults(season: number) {
-  console.log(`\nSyncing past session results for ${season}…`);
+  console.log(`\n▶ Sincronizando resultados pasados para ${season}…`);
 
   // Use 3h buffer so a race that just ended has time to appear in OpenF1
   const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
@@ -323,14 +345,13 @@ async function seedPastResults(season: number) {
     .sort({ round: 1 })
     .lean();
 
+  console.log(`  · ${pastGPs.length} GPs pasados a procesar`);
+
   let syncedGPs = 0;
   let skippedGPs = 0;
 
   for (const gp of pastGPs) {
-    console.log(`\n  R${gp.round} ${gp.name}:`);
-
-    // Brief pause before each GP to avoid hitting OpenF1 rate limits
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    console.log(`\n  R${gp.round} ${gp.name} (meeting ${gp.meetingKey}):`);
 
     // Fetch all sessions for this meeting from OpenF1
     let sessions: OpenF1Session[];
@@ -344,6 +365,7 @@ async function seedPastResults(season: number) {
 
     // Sort chronologically
     sessions.sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+    console.log(`    · ${sessions.length} sesiones recibidas: ${sessions.map((s) => s.session_name).join(", ")}`);
 
     let raceSessionResults: { code: string }[] | null = null;
 
@@ -374,9 +396,6 @@ async function seedPastResults(season: number) {
       } catch (err) {
         console.log(`    ⚠ ${s.session_name}: ${err instanceof Error ? err.message : "error"}`);
       }
-
-      // Pause between session syncs to stay within OpenF1 rate limits
-      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     // Create RaceResult if we have race podium and it doesn't exist yet

@@ -141,9 +141,10 @@ export default async function GPDetailPage({
     <div className="space-y-6">
       <Link
         href="/calendar"
-        className="text-sm text-zinc-400 hover:text-white transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-2 group"
       >
-        ← Volver al calendario
+        <span className="text-base leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
+        Volver al calendario
       </Link>
 
       <div className="flex flex-col sm:flex-row gap-6 items-start">

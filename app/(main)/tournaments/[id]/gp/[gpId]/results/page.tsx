@@ -140,9 +140,10 @@ export default async function ResultsPage({
       <div>
         <Link
           href={`/tournaments/${tournamentId}`}
-          className="text-sm text-zinc-400 hover:text-white transition-colors inline-flex items-center gap-1 mb-2"
+          className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-6 group"
         >
-          ← Volver al torneo
+          <span className="text-base leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
+          Volver al torneo
         </Link>
         <div className="flex items-center gap-2 text-sm text-zinc-500 mb-1">
           <Link
