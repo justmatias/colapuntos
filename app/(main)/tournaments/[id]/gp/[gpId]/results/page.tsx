@@ -70,11 +70,14 @@ export default async function ResultsPage({
       tournament: new Types.ObjectId(tournamentId),
       grandPrix: new Types.ObjectId(gpId),
     }).lean(),
-    Driver.find({ season: tournament.season }).select("fullName").lean(),
+    Driver.find({ season: tournament.season }).select("fullName teamColour").lean(),
   ]);
 
-  const driverMap = new Map(drivers.map((d) => [d._id.toString(), d.fullName as string]));
-  const driverName = (id: string) => driverMap.get(id) ?? "—";
+  const driverMap = new Map(
+    drivers.map((d) => [d._id.toString(), { fullName: d.fullName as string, teamColour: d.teamColour as string | undefined }])
+  );
+  const driverName = (id: string) => driverMap.get(id)?.fullName ?? "—";
+  const driverColour = (id: string) => driverMap.get(id)?.teamColour ?? undefined;
 
   const result = raceResult
     ? {
@@ -171,6 +174,10 @@ export default async function ResultsPage({
                 <span className="font-bold text-sm text-zinc-400 w-6">
                   {POSITION_LABELS[i]}
                 </span>
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: driverColour(id) ?? "#666" }}
+                />
                 <span className="font-medium">{driverName(id)}</span>
               </div>
             ))}

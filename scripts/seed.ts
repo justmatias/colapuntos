@@ -1,6 +1,20 @@
 import "dotenv/config";
 import mongoose from "mongoose";
 import { DateTime } from "luxon";
+import { Types } from "mongoose";
+import { recalculateScoresForGP } from "../lib/scoring-recalc";
+import { SessionResult } from "../lib/models/SessionResult";
+import {
+  fetchOpenF1,
+  fetchMeetings,
+  fetchSessionsForYear,
+  fetchSessionsForMeeting,
+  fetchWeather,
+  type OpenF1Meeting,
+  type OpenF1Session,
+  type OpenF1Driver,
+} from "../lib/openf1";
+import { syncSessionResults } from "../lib/session-results";
 
 // ── Mongoose models (inline to avoid Next.js module issues in tsx) ─────────────
 
@@ -67,45 +81,6 @@ const GrandPrix =
 const RaceResult =
   mongoose.models.RaceResult ?? mongoose.model("RaceResult", RaceResultSchema);
 
-// ── OpenF1 types ──────────────────────────────────────────────────────────────
-
-interface OpenF1Meeting {
-  meeting_key: number;
-  meeting_name: string;
-  country_name: string;
-  country_code: string;
-  country_flag?: string;
-  circuit_short_name: string;
-  circuit_image?: string;
-  location: string;
-  date_start: string;
-  date_end: string;
-  gmt_offset: string;
-  is_cancelled: boolean;
-}
-
-interface OpenF1Session {
-  session_key: number;
-  session_name: string;
-  session_type: string;
-  meeting_key: number;
-  date_start: string;
-  date_end: string;
-  gmt_offset: string;
-  is_cancelled: boolean;
-}
-
-interface OpenF1Driver {
-  driver_number: number;
-  first_name: string;
-  last_name: string;
-  full_name: string;
-  name_acronym: string;
-  team_name: string;
-  team_colour?: string;
-  headshot_url?: string;
-}
-
 // ── Timezone map (IANA) by country_code ──────────────────────────────────────
 // OpenF1 gives gmt_offset but not IANA names — we need IANA for Luxon DST handling
 
@@ -164,23 +139,13 @@ function computeDeadline(raceDateUtc: string, timezone: string): Date {
   return deadline.toUTC().toJSDate();
 }
 
-// ── OpenF1 fetcher ────────────────────────────────────────────────────────────
-
-const BASE_URL = "https://api.openf1.org/v1";
-
-async function fetchOpenF1<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
-  if (!res.ok) throw new Error(`OpenF1 ${path} → ${res.status}`);
-  return res.json() as Promise<T>;
-}
-
 // ── Seed drivers ──────────────────────────────────────────────────────────────
 
 async function seedDrivers(season: number) {
   console.log(`\nFetching drivers for season ${season}…`);
   // Resolve the most recent past main Race session so we get the correct season roster.
   // session_key=latest can resolve to a session from a different season during the offseason.
-  const raceSessions = await fetchOpenF1<OpenF1Session[]>(`/sessions?year=${season}&session_type=Race`);
+  const raceSessions = await fetchSessionsForYear(season);
   const pastRace = raceSessions
     .filter((s) => s.session_name === "Race" && new Date(s.date_start) < new Date())
     .sort((a, b) => new Date(b.date_start).getTime() - new Date(a.date_start).getTime())[0];
@@ -221,8 +186,8 @@ async function seedCalendar(season: number) {
   console.log(`\nFetching calendar for ${season} from OpenF1…`);
 
   const [meetings, sessions] = await Promise.all([
-    fetchOpenF1<OpenF1Meeting[]>(`/meetings?year=${season}`),
-    fetchOpenF1<OpenF1Session[]>(`/sessions?year=${season}`),
+    fetchMeetings(season),
+    fetchSessionsForYear(season),
   ]);
 
   if (meetings.length === 0) {
@@ -338,39 +303,13 @@ async function seedCalendar(season: number) {
   );
 }
 
-// ── Weather helper ────────────────────────────────────────────────────────────
-
-async function fetchWeatherCondition(
-  raceSessionKey: number
-): Promise<"dry" | "wet" | "mixed" | null> {
-  try {
-    const res = await fetch(`${BASE_URL}/weather?session_key=${raceSessionKey}`);
-    if (!res.ok) return null;
-    const data = (await res.json()) as { rainfall: number }[];
-    if (data.length === 0) return null;
-    const wetCount = data.filter((w) => w.rainfall > 0).length;
-    const ratio = wetCount / data.length;
-    return ratio === 0 ? "dry" : ratio > 0.5 ? "wet" : "mixed";
-  } catch {
-    return null;
-  }
-}
-
 // ── Seed past results ─────────────────────────────────────────────────────────
-// For each past GP: fetch podium from OpenF1 and store it.
-// Only trust OpenF1's is_cancelled flag for cancellations — never infer
-// cancellation from missing results or raceSessionKey.
-
-interface OpenF1SessionResult {
-  position: number;
-  driver_number: number;
-  dnf?: boolean;
-  dns?: boolean;
-  dsq?: boolean;
-}
+// For each past GP: sync ALL session types (P1, P2, P3, Qualifying, Race,
+// Sprint Qualifying, Sprint) from OpenF1 via meetings → sessions → session_result → drivers.
+// Only trust OpenF1's is_cancelled flag for cancellations.
 
 async function seedPastResults(season: number) {
-  console.log(`\nSyncing past race results for ${season}…`);
+  console.log(`\nSyncing past session results for ${season}…`);
 
   // Use 3h buffer so a race that just ended has time to appear in OpenF1
   const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
@@ -378,125 +317,128 @@ async function seedPastResults(season: number) {
   const pastGPs = await GrandPrix.find({
     season,
     raceDate: { $lte: cutoff },
+    cancelled: { $ne: true },
+    meetingKey: { $exists: true },
   })
     .sort({ round: 1 })
     .lean();
 
-  let synced = 0;
-  let alreadyDone = 0;
-  let skipped = 0;
+  let syncedGPs = 0;
+  let skippedGPs = 0;
 
   for (const gp of pastGPs) {
-    // Trust OpenF1's is_cancelled flag only (set during seedCalendar)
-    if (gp.cancelled) {
-      alreadyDone++;
-      continue;
-    }
+    console.log(`\n  R${gp.round} ${gp.name}:`);
 
-    // No race session yet → wait for next seed run
-    if (!gp.raceSessionKey) {
-      console.log(`  ⚠  R${gp.round} ${gp.name}: sin raceSessionKey (se reintentará)`);
-      skipped++;
-      continue;
-    }
+    // Brief pause before each GP to avoid hitting OpenF1 rate limits
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Already has a result → skip result sync but backfill weather if missing
-    const existing = await RaceResult.findOne({ grandPrix: gp._id }).lean();
-    if (existing) {
-      if (!gp.weatherCondition) {
-        const wc = await fetchWeatherCondition(gp.raceSessionKey);
-        if (wc) {
-          await GrandPrix.findByIdAndUpdate(gp._id, { weatherCondition: wc });
-          console.log(`  🌦  R${gp.round} ${gp.name}: weather → ${wc}`);
-        }
-      }
-      alreadyDone++;
-      continue;
-    }
-
-    // Fetch from OpenF1 — no position filter so we can skip DSQ/DNS drivers
-    let results: OpenF1SessionResult[];
+    // Fetch all sessions for this meeting from OpenF1
+    let sessions: OpenF1Session[];
     try {
-      const res = await fetch(
-        `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}`
-      );
-      if (!res.ok) {
-        // Transient API error — retry on next seed run
-        console.log(`  ⚠  R${gp.round} ${gp.name}: API error ${res.status} (se reintentará en próximo seed)`);
-        skipped++;
+      sessions = await fetchSessionsForMeeting(gp.meetingKey!);
+    } catch (err) {
+      console.log(`    ⚠ No se pudieron obtener sesiones: ${err instanceof Error ? err.message : err}`);
+      skippedGPs++;
+      continue;
+    }
+
+    // Sort chronologically
+    sessions.sort((a, b) => new Date(a.date_start).getTime() - new Date(b.date_start).getTime());
+
+    let raceSessionResults: { code: string }[] | null = null;
+
+    for (const s of sessions) {
+      const isPast = new Date(s.date_end) <= cutoff;
+      if (!isPast) continue;
+
+      // Skip if already in DB
+      const alreadySynced = await SessionResult.findOne({ sessionKey: s.session_key }).lean();
+      if (alreadySynced) {
+        console.log(`    ⏹ ${s.session_name}: ya existe en DB`);
+        if (s.session_name === "Race") {
+          raceSessionResults = alreadySynced.results.map((r: { code: string }) => ({ code: r.code }));
+        }
         continue;
       }
-      results = (await res.json()) as OpenF1SessionResult[];
-    } catch {
-      console.log(`  ⚠  R${gp.round} ${gp.name}: error de red (se reintentará en próximo seed)`);
-      skipped++;
-      continue;
+
+      try {
+        const results = await syncSessionResults(s.session_key, gp._id.toString());
+        if (results.length > 0) {
+          console.log(`    ✓ ${s.session_name}: P1 ${results[0].code}, P2 ${results[1]?.code ?? "–"}, P3 ${results[2]?.code ?? "–"}`);
+          if (s.session_name === "Race") {
+            raceSessionResults = results;
+          }
+        } else {
+          console.log(`    ~ ${s.session_name}: sin resultados aún`);
+        }
+      } catch (err) {
+        console.log(`    ⚠ ${s.session_name}: ${err instanceof Error ? err.message : "error"}`);
+      }
+
+      // Pause between session syncs to stay within OpenF1 rate limits
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
-    if (results.length === 0) {
-      // Results not yet available in OpenF1 — retry on next seed run
-      console.log(`  ⚠  R${gp.round} ${gp.name}: sin resultados en OpenF1 (se reintentará)`);
-      skipped++;
-      continue;
+    // Create RaceResult if we have race podium and it doesn't exist yet
+    if (raceSessionResults && raceSessionResults.length >= 3) {
+      const existingRaceResult = await RaceResult.findOne({ grandPrix: gp._id }).lean();
+      if (existingRaceResult) {
+        console.log(`    ⏹ RaceResult: ya existe — protegido`);
+      } else {
+        const codes = raceSessionResults.slice(0, 3).map((r) => r.code);
+        const driverDocs = await Driver.find({ season, code: { $in: codes } })
+          .select("code")
+          .lean();
+        const driverByCode = new Map(driverDocs.map((d) => [d.code, d]));
+        const p1 = driverByCode.get(codes[0]);
+        const p2 = driverByCode.get(codes[1]);
+        const p3 = driverByCode.get(codes[2]);
+
+        if (!p1 || !p2 || !p3) {
+          console.log(`    ⚠ Códigos no encontrados en DB: ${codes.join(", ")}`);
+          skippedGPs++;
+          continue;
+        }
+
+        await RaceResult.create({ grandPrix: gp._id, p1: p1._id, p2: p2._id, p3: p3._id });
+
+        let wc: "dry" | "wet" | "mixed" | null = null;
+        if (gp.raceSessionKey) {
+          try {
+            const weatherData = await fetchWeather(gp.raceSessionKey);
+            if (weatherData.length > 0) {
+              const wetCount = weatherData.filter((w) => w.rainfall > 0).length;
+              const ratio = wetCount / weatherData.length;
+              wc = ratio === 0 ? "dry" : ratio > 0.5 ? "wet" : "mixed";
+            }
+          } catch {
+            // best-effort
+          }
+        }
+
+        await GrandPrix.findByIdAndUpdate(gp._id, {
+          status: "completed",
+          ...(wc ? { weatherCondition: wc } : {}),
+        });
+
+        const weatherTag = wc ? ` [${wc}]` : "";
+        console.log(`    ✓ RaceResult guardado: P1 ${codes[0]}, P2 ${codes[1]}, P3 ${codes[2]}${weatherTag}`);
+        syncedGPs++;
+      }
+    } else if (!raceSessionResults) {
+      if (gp.raceSessionKey) {
+        console.log(`    ~ Sin resultados de carrera aún (se reintentará)`);
+      } else {
+        console.log(`    ~ Sin raceSessionKey (se reintentará)`);
+      }
+      skippedGPs++;
     }
-
-    // Build classified podium: sorted by position, excluding disqualified/DNS drivers
-    const classified = results
-      .filter((r) => !r.dsq && !r.dns)
-      .sort((a, b) => a.position - b.position);
-
-    const p1num = classified[0]?.driver_number;
-    const p2num = classified[1]?.driver_number;
-    const p3num = classified[2]?.driver_number;
-
-    if (!p1num || !p2num || !p3num) {
-      console.log(`  ⚠  R${gp.round} ${gp.name}: podio incompleto`);
-      skipped++;
-      continue;
-    }
-
-    const driverDocs = await Driver.find({
-      season,
-      number: { $in: [p1num, p2num, p3num] },
-    })
-      .select("code number")
-      .lean();
-
-    const driverByNum = new Map(driverDocs.map((d) => [d.number as number, d]));
-
-    const p1 = driverByNum.get(p1num);
-    const p2 = driverByNum.get(p2num);
-    const p3 = driverByNum.get(p3num);
-
-    if (!p1 || !p2 || !p3) {
-      console.log(
-        `  ⚠  R${gp.round} ${gp.name}: pilotos no encontrados (${[p1num, p2num, p3num].join(", ")})`
-      );
-      skipped++;
-      continue;
-    }
-
-    await RaceResult.findOneAndUpdate(
-      { grandPrix: gp._id },
-      { p1: p1._id, p2: p2._id, p3: p3._id },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-    const wc = await fetchWeatherCondition(gp.raceSessionKey);
-    await GrandPrix.findByIdAndUpdate(gp._id, {
-      status: "completed",
-      ...(wc ? { weatherCondition: wc } : {}),
-    });
-
-    const weatherTag = wc ? ` [${wc}]` : "";
-    console.log(`  ✓  R${gp.round} ${gp.name}: P1 ${p1.code}, P2 ${p2.code}, P3 ${p3.code}${weatherTag}`);
-    synced++;
   }
 
   const parts = [];
-  if (synced) parts.push(`${synced} sincronizados`);
-  if (alreadyDone) parts.push(`${alreadyDone} ya tenían resultado / cancelados`);
-  if (skipped) parts.push(`${skipped} omitidos (reintentar)`);
-  console.log(`  → ${parts.join(", ") || "nada que hacer"}`);
+  if (syncedGPs) parts.push(`${syncedGPs} GPs con nuevos resultados`);
+  if (skippedGPs) parts.push(`${skippedGPs} omitidos (reintentar)`);
+  console.log(`\n  → ${parts.join(", ") || "nada que hacer"}`);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -510,9 +452,21 @@ async function main() {
   console.log("Connected.");
 
   try {
-    await seedDrivers(2026);
-    await seedCalendar(2026);
-    await seedPastResults(2026);
+    const season = new Date().getFullYear();
+    await seedDrivers(season);
+    await seedCalendar(season);
+    await seedPastResults(season);
+
+    // Recalculate all scores for GPs that now have results
+    const results = await RaceResult.find({}).select("grandPrix").lean();
+    const gpIds = [...new Set(results.map((r) => r.grandPrix.toString()))];
+    if (gpIds.length > 0) {
+      console.log(`\nRecalculating scores for ${gpIds.length} GPs…`);
+      for (const gpId of gpIds) {
+        await recalculateScoresForGP(gpId);
+      }
+      console.log(`  ✓ Scores recalculated`);
+    }
   } finally {
     await mongoose.disconnect();
     console.log("\nDone. Disconnected from MongoDB.");

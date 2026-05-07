@@ -9,17 +9,9 @@ import { RaceResult } from "@/lib/models/RaceResult";
 import { Driver } from "@/lib/models/Driver";
 import { AuditLog } from "@/lib/models/AuditLog";
 import { Tournament } from "@/lib/models/Tournament";
+import { syncSessionResults } from "@/lib/session-results";
 import { recalculateScoresForGP } from "@/lib/actions/scoring.actions";
-
-const BASE_URL = "https://api.openf1.org/v1";
-
-interface OpenF1SessionResult {
-  position: number;
-  driver_number: number;
-  dnf?: boolean;
-  dns?: boolean;
-  dsq?: boolean;
-}
+import { fetchMeetingByKey, fetchWeather } from "@/lib/openf1";
 
 type SyncResult =
   | { success: true; updated: boolean; details: string }
@@ -43,22 +35,16 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
   if (new Date() < new Date(gp.raceDate))
     return { success: false, error: "La carrera aún no se ha disputado" };
 
-  if (gp.status === "completed")
-    return { success: true, updated: false, details: "GP ya procesado" };
-
   if (gp.cancelled)
     return { success: false, error: "GP cancelado" };
 
   // Verify cancellation status directly from OpenF1 before syncing
   if (gp.meetingKey) {
     try {
-      const meetingRes = await fetch(`${BASE_URL}/meetings?meeting_key=${gp.meetingKey}`);
-      if (meetingRes.ok) {
-        const meetings = (await meetingRes.json()) as { is_cancelled: boolean }[];
-        if (meetings.length > 0 && meetings[0].is_cancelled) {
-          await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
-          return { success: false, error: "GP cancelado según OpenF1" };
-        }
+      const meeting = await fetchMeetingByKey(gp.meetingKey);
+      if (meeting?.is_cancelled) {
+        await GrandPrix.findByIdAndUpdate(gpId, { cancelled: true });
+        return { success: false, error: "GP cancelado según OpenF1" };
       }
     } catch {
       // best-effort check, continue
@@ -69,98 +55,80 @@ export async function syncRaceResultsForGP(gpId: string, tournamentId?: string):
     return { success: false, error: "Sin sesión de carrera en OpenF1 — se reintentará" };
   }
 
-  let results: OpenF1SessionResult[];
+  // Sync session results from OpenF1 (stores in SessionResult)
+  let sessionResults;
   try {
-    const res = await fetch(
-      `${BASE_URL}/session_result?session_key=${gp.raceSessionKey}`
-    );
-    if (!res.ok) {
-      // Transient API error — caller can retry
-      return { success: false, error: `OpenF1 API error ${res.status} — intente de nuevo más tarde` };
-    }
-    results = (await res.json()) as OpenF1SessionResult[];
-  } catch {
-    return { success: false, error: "Error al consultar la API de OpenF1" };
+    sessionResults = await syncSessionResults(gp.raceSessionKey, gpId);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Error al sincronizar resultados de sesión" };
   }
 
-  if (results.length === 0) {
+  if (sessionResults.length === 0) {
     return { success: false, error: "OpenF1 aún no tiene resultados — se reintentará" };
   }
 
-  // Build classified podium: sorted by position, excluding disqualified/DNS drivers
-  const classified = results
-    .filter((r) => !r.dsq && !r.dns)
-    .sort((a, b) => a.position - b.position);
+  const top3 = sessionResults.slice(0, 3);
+  const codes = top3.map((r) => r.code);
 
-  const p1num = classified[0]?.driver_number ?? null;
-  const p2num = classified[1]?.driver_number ?? null;
-  const p3num = classified[2]?.driver_number ?? null;
-
-  if (!p1num || !p2num || !p3num)
-    return { success: false, error: "Faltan posiciones del podio en la respuesta de la API" };
-
+  // Resolve to MongoDB Driver ObjectIds by code
   const driverDocs = await Driver.find({
     season: gp.season,
-    number: { $in: [p1num, p2num, p3num] },
+    code: { $in: codes },
   })
-    .select("code fullName number")
+    .select("code")
     .lean();
 
-  const driverByNum = new Map(driverDocs.map((d) => [d.number, d]));
+  const driverByCode = new Map(driverDocs.map((d) => [d.code, d._id as Types.ObjectId]));
 
-  function resolveDriverId(num: number): Types.ObjectId | null {
-    const d = driverByNum.get(num);
-    return d ? (d._id as Types.ObjectId) : null;
-  }
-
-  const p1Id = resolveDriverId(p1num);
-  const p2Id = resolveDriverId(p2num);
-  const p3Id = resolveDriverId(p3num);
+  const p1Id = driverByCode.get(top3[0].code);
+  const p2Id = driverByCode.get(top3[1].code);
+  const p3Id = driverByCode.get(top3[2].code);
 
   if (!p1Id || !p2Id || !p3Id)
     return {
       success: false,
-      error: `No se encontraron pilotos en la DB para los números: ${[p1num, p2num, p3num].join(
-        ", "
-      )}`,
+      error: `No se encontraron pilotos en la DB para los códigos: ${codes.join(", ")}`,
     };
 
-  const before = await RaceResult.findOneAndUpdate(
-    { grandPrix: new Types.ObjectId(gpId) },
-    { p1: p1Id, p2: p2Id, p3: p3Id },
-    { upsert: true, new: false, setDefaultsOnInsert: true }
-  );
+  const existing = await RaceResult.findOne({ grandPrix: new Types.ObjectId(gpId) }).lean();
 
-  if (before) {
+  if (existing) {
     const same =
-      (before.p1 as Types.ObjectId).toString() === p1Id.toString() &&
-      (before.p2 as Types.ObjectId).toString() === p2Id.toString() &&
-      (before.p3 as Types.ObjectId).toString() === p3Id.toString();
+      (existing.p1 as Types.ObjectId).toString() === p1Id.toString() &&
+      (existing.p2 as Types.ObjectId).toString() === p2Id.toString() &&
+      (existing.p3 as Types.ObjectId).toString() === p3Id.toString();
     if (same)
       return { success: true, updated: false, details: "Resultado ya sincronizado, sin cambios" };
+
+    // Discrepancy detected — do NOT auto-update to protect verified results
+    return {
+      success: true,
+      updated: false,
+      details: `Discrepancia: OpenF1 dice ${codes.join(" / ")} pero el resultado guardado es diferente. Usar admin manual para corregir.`,
+    };
   }
+
+  await RaceResult.create({
+    grandPrix: new Types.ObjectId(gpId),
+    p1: p1Id,
+    p2: p2Id,
+    p3: p3Id,
+  });
 
   await GrandPrix.findByIdAndUpdate(gpId, { status: "completed" });
   await recalculateScoresForGP(gpId);
 
   try {
-    const weatherRes = await fetch(`${BASE_URL}/weather?session_key=${gp.raceSessionKey}`);
-    if (weatherRes.ok) {
-      const weatherData = (await weatherRes.json()) as { rainfall: number }[];
-      if (weatherData.length > 0) {
-        const wetCount = weatherData.filter((w) => w.rainfall > 0).length;
-        const ratio = wetCount / weatherData.length;
-        const weatherCondition = ratio === 0 ? "dry" : ratio > 0.5 ? "wet" : "mixed";
-        await GrandPrix.findByIdAndUpdate(gpId, { weatherCondition });
-      }
+    const weatherData = await fetchWeather(gp.raceSessionKey);
+    if (weatherData.length > 0) {
+      const wetCount = weatherData.filter((w) => w.rainfall > 0).length;
+      const ratio = wetCount / weatherData.length;
+      const weatherCondition = ratio === 0 ? "dry" : ratio > 0.5 ? "wet" : "mixed";
+      await GrandPrix.findByIdAndUpdate(gpId, { weatherCondition });
     }
   } catch {
     // weather fetch is best-effort, don't block sync
   }
-
-  const codes = [p1num, p2num, p3num].map(
-    (n) => driverByNum.get(n)?.code ?? `#${n}`
-  );
   const details = `${gp.name}: P1 ${codes[0]}, P2 ${codes[1]}, P3 ${codes[2]} (sync automático)`;
 
   await AuditLog.create({
@@ -182,14 +150,30 @@ export async function syncAllPendingResults(): Promise<{
   await connectDB();
 
   const cutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const recentCompletedCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const gps = await GrandPrix.find({
-    raceDate: { $lte: cutoff },
-    status: { $ne: "completed" },
-    cancelled: { $ne: true },
-  })
-    .select("_id raceSessionKey")
-    .lean();
+  // Sync pending GPs + recently completed GPs (in case OpenF1 corrected data)
+  const [pendingGPs, recentCompletedGPs] = await Promise.all([
+    GrandPrix.find({
+      raceDate: { $lte: cutoff },
+      status: { $ne: "completed" },
+      cancelled: { $ne: true },
+    })
+      .select("_id raceSessionKey")
+      .lean(),
+    GrandPrix.find({
+      raceDate: { $lte: cutoff, $gte: recentCompletedCutoff },
+      status: "completed",
+      cancelled: { $ne: true },
+    })
+      .select("_id raceSessionKey")
+      .lean(),
+  ]);
+
+  const gpMap = new Map<string, typeof pendingGPs[0]>();
+  for (const gp of pendingGPs) gpMap.set(gp._id.toString(), gp);
+  for (const gp of recentCompletedGPs) gpMap.set(gp._id.toString(), gp);
+  const gps = Array.from(gpMap.values());
 
   const errors: string[] = [];
   let synced = 0;
