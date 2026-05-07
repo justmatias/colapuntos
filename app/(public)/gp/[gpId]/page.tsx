@@ -9,6 +9,7 @@ import { getSessionResults } from "@/lib/session-results";
 import { fetchSessionsForMeeting, type OpenF1Session } from "@/lib/openf1";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
+import { BackLink } from "@/components/back-link";
 
 const SESSION_NAME_ICON: Record<string, string> = {
   Race: "🏁",
@@ -139,13 +140,7 @@ export default async function GPDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link
-        href="/calendar"
-        className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/80 hover:text-white transition-colors mb-2 group"
-      >
-        <span className="text-base leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
-        Volver al calendario
-      </Link>
+      <BackLink href="/calendar" label="Volver al calendario" />
 
       <div className="flex flex-col sm:flex-row gap-6 items-start">
         <div className="shrink-0 flex flex-col gap-3">

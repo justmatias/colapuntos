@@ -23,6 +23,7 @@ import {
 	TableHeader,
 	TableRow,
 } from '@/components/ui/table';
+import { LeaveTournament } from './LeaveTournament';
 
 const STATUS_DOT: Record<string, string> = {
 	completed: 'bg-zinc-500',
@@ -242,6 +243,9 @@ export default async function TournamentPage({
 						>
 							Predecir próxima carrera →
 						</Link>
+					)}
+					{!tournament.isCreator && (
+						<LeaveTournament tournamentId={tournament.id} />
 					)}
 				</div>
 			</div>

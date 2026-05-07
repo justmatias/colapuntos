@@ -14,6 +14,7 @@ import { User } from "@/lib/models/User";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { BackLink } from "@/components/back-link";
 
 const POSITION_LABELS = ["P1", "P2", "P3"] as const;
 
@@ -139,13 +140,7 @@ export default async function ResultsPage({
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <Link
-          href={`/tournaments/${tournamentId}`}
-          className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/80 hover:text-white transition-colors mb-6 group"
-        >
-          <span className="text-base leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
-          Volver al torneo
-        </Link>
+        <BackLink href={`/tournaments/${tournamentId}`} label="Volver al torneo" />
         <div className="flex items-center gap-2 text-sm text-zinc-500 mb-1">
           <Link
             href={`/tournaments/${tournamentId}`}

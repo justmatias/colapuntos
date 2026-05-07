@@ -52,7 +52,7 @@ async function getLeaderboardData(tournamentId: string, userId: string) {
       round: gp.round,
       gpName: gp.name,
       points: score.points,
-      breakdown: score.breakdown,
+      breakdown: score.breakdown ?? { p1: 0, p2: 0, p3: 0 },
     });
   }
 

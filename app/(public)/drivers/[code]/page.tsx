@@ -1,6 +1,6 @@
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/back-link";
 import { connectDB } from "@/lib/db/mongoose";
 import { Driver } from "@/lib/models/Driver";
 import { GrandPrix } from "@/lib/models/GrandPrix";
@@ -110,6 +110,7 @@ async function getDriverDetail(code: string) {
           .catch(() => {}),
       ]);
 
+      const dnf = position === null && stints.length > 0;
       return {
         gpId: gp._id.toString(),
         name: gp.name,
@@ -118,6 +119,7 @@ async function getDriverDetail(code: string) {
         round: gp.round,
         position,
         stints,
+        dnf,
       };
     })
   );
@@ -138,8 +140,9 @@ async function getDriverDetail(code: string) {
   };
 }
 
-function positionBadge(pos: number | null) {
-  if (pos === null) return <span className="text-zinc-600 font-mono text-sm">—</span>;
+function positionBadge(pos: number | null, dnf: boolean) {
+  if (dnf) return <span className="text-xs font-bold text-red-500/60 font-mono">RET</span>;
+  if (pos === null) return <span className="text-zinc-500 font-mono text-sm">—</span>;
   const color =
     pos === 1 ? "text-yellow-400" : pos === 2 ? "text-zinc-300" : pos === 3 ? "text-amber-600" : "text-zinc-400";
   return <span className={`font-mono font-bold text-sm ${color}`}>P{pos}</span>;
@@ -159,10 +162,7 @@ export default async function DriverDetailPage({
 
   return (
     <div className="space-y-8">
-      <Link href="/drivers" className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/80 hover:text-white transition-colors mb-2 group">
-        <span className="text-base leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
-        Pilotos
-      </Link>
+      <BackLink href="/drivers" label="Pilotos" />
 
       {/* Header */}
       <div className="flex items-center gap-5">
@@ -183,7 +183,7 @@ export default async function DriverDetailPage({
           </div>
         )}
         <div>
-          <p className="text-sm text-zinc-500 font-mono">{driver.code} · #{driver.number}</p>
+          <p className="text-sm text-zinc-400 font-mono">{driver.code} · #{driver.number}</p>
           <h1 className="text-2xl font-bold" style={{ color: driver.teamColour }}>
             {driver.fullName}
           </h1>
@@ -223,10 +223,11 @@ export default async function DriverDetailPage({
             {raceResults.map((race) => (
               <Card
                 key={race.gpId}
-                className="px-4 py-3 border-zinc-800 bg-zinc-900/80"
+                className="px-4 py-3 border-zinc-800 bg-zinc-900/80 border-l-2"
+                style={{ borderLeftColor: driver.teamColour }}
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-zinc-600 font-mono w-6 shrink-0">
+                  <span className="text-xs text-zinc-500 font-mono w-6 shrink-0">
                     R{race.round}
                   </span>
                   {race.countryFlag && (
@@ -251,7 +252,7 @@ export default async function DriverDetailPage({
                     ))}
                   </div>
                   <div className="w-10 text-right shrink-0">
-                    {positionBadge(race.position)}
+                    {positionBadge(race.position, race.dnf)}
                   </div>
                 </div>
               </Card>

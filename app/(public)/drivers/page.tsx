@@ -122,17 +122,17 @@ export default async function DriversPage() {
                 </p>
                 <div className="flex items-center gap-3 mt-2">
                   <span className="text-xs text-zinc-500">
-                    <span className="text-zinc-600">#</span>
+                    <span className="text-zinc-500">#</span>
                     {driver.number}
                   </span>
-                  <span className="text-xs text-zinc-600 uppercase font-mono">
+                  <span className="text-xs text-zinc-500 uppercase font-mono">
                     {driver.code}
                   </span>
                   {driver.latestPosition !== null && (
                     <span className="text-xs ml-auto font-mono">
-                      <span className="text-zinc-600">P</span>
+                      <span className="text-zinc-400">P</span>
                       <span className="text-zinc-300">{driver.latestPosition}</span>
-                      <span className="text-zinc-600"> en {lastGPName}</span>
+                      <span className="text-zinc-500"> en {lastGPName}</span>
                     </span>
                   )}
                 </div>

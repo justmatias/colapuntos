@@ -28,7 +28,7 @@ export function NavLinks({ links }: { links: NavLink[] }) {
                 "relative px-2 sm:px-3 py-1.5 rounded-md transition-colors",
                 isActive
                   ? "text-white font-semibold after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-red-500 after:content-['']"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-400 font-medium hover:text-white hover:bg-zinc-800"
               )}
             >
               {link.label}

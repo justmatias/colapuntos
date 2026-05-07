@@ -148,7 +148,10 @@ export default async function CalendarPage() {
           >
             <div className="shrink-0 flex flex-col items-center gap-0.5">
               <span className="text-zinc-600 font-mono text-xs">{gp.round}</span>
-              <span className="text-lg">{STATUS_ICON[gp.status]}</span>
+              {gp.status === "completed"
+                ? <span className="w-2.5 h-2.5 rounded-full bg-green-500 mt-1" />
+                : <span className="text-lg">{STATUS_ICON[gp.status]}</span>
+              }
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">

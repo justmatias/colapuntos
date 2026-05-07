@@ -28,9 +28,9 @@ export default async function PublicLayout({
 
   const navLinks = session
     ? [
+        { href: "/dashboard", label: "Dashboard", show: true, icon: "LayoutDashboard" as const },
         { href: "/calendar", label: "Calendario", show: true, icon: "CalendarDays" as const },
         { href: "/drivers", label: "Pilotos", show: true, icon: "Users" as const },
-        { href: "/dashboard", label: "Dashboard", show: true, icon: "LayoutDashboard" as const },
         { href: "/profile", label: "Perfil", show: true, icon: "UserCircle" as const },
       ]
     : [

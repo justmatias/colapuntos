@@ -135,6 +135,48 @@ export async function regenerateInviteCode(
   }
 }
 
+export async function leaveTournament(
+  tournamentId: string
+): Promise<ActionResult> {
+  try {
+    const session = await getSession();
+    await connectDB();
+
+    const tournament = await Tournament.findById(tournamentId);
+    if (!tournament) return { success: false, error: "Torneo no encontrado" };
+
+    if (tournament.creator.toString() === session.user.id)
+      return { success: false, error: "El creador no puede abandonar el torneo" };
+
+    const isMember = (tournament.members as Types.ObjectId[]).some(
+      (m) => m.toString() === session.user.id
+    );
+    if (!isMember)
+      return { success: false, error: "No sos miembro de este torneo" };
+
+    tournament.members = (tournament.members as Types.ObjectId[]).filter(
+      (m) => m.toString() !== session.user.id
+    );
+    await tournament.save();
+
+    await AuditLog.create({
+      user: new Types.ObjectId(session.user.id),
+      tournament: tournament._id,
+      action: "leave_tournament",
+      details: "Abandonó el torneo",
+    });
+
+    revalidatePath(`/tournaments/${tournamentId}`, "layout");
+    revalidatePath("/dashboard");
+    return { success: true, data: undefined };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error al abandonar el torneo",
+    };
+  }
+}
+
 export async function deleteTournament(
   tournamentId: string
 ): Promise<ActionResult> {
