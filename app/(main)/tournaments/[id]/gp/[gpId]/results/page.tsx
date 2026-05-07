@@ -135,6 +135,12 @@ export default async function ResultsPage({
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
+        <Link
+          href={`/tournaments/${tournamentId}`}
+          className="text-sm text-zinc-400 hover:text-white transition-colors inline-flex items-center gap-1 mb-2"
+        >
+          ← Volver al torneo
+        </Link>
         <div className="flex items-center gap-2 text-sm text-zinc-500 mb-1">
           <Link
             href={`/tournaments/${tournamentId}`}

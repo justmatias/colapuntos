@@ -9,4 +9,9 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
+  session: {
+    expiresIn: 60 * 60 * 24 * 30, // 30 days
+    updateAge: 60 * 60 * 24 * 7,   // refresh after 7 days of inactivity
+    freshAge: 60 * 60 * 24,         // not fresh after 24h
+  },
 });

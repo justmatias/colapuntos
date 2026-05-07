@@ -181,7 +181,7 @@ export default async function CalendarPage() {
             </div>
             <div className="shrink-0 pt-0.5">
               {gp.cancelled && (
-                <Badge className="bg-red-950/50 text-red-400/70 border border-red-900/40 text-xs">No disponible</Badge>
+                <Badge className="bg-red-950/50 text-red-400/70 border border-red-900/40 text-xs">Cancelado</Badge>
               )}
               {!gp.cancelled && gp.status === "open" && (
                 <Badge className="bg-green-700/30 text-green-400 border border-green-700/50 text-xs">

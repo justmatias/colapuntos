@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
+import { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { GrandPrix } from "@/lib/models/GrandPrix";
 import { Driver } from "@/lib/models/Driver";
+import { RaceResult } from "@/lib/models/RaceResult";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 
@@ -75,6 +77,19 @@ async function getGPData(gpId: string) {
   }).lean();
 
   const driverByNum = new Map(drivers.map((d) => [d.number, d]));
+  const driverById = new Map(drivers.map((d) => [d._id.toString(), d]));
+
+  const localRaceResult = await RaceResult.findOne({
+    grandPrix: gp._id,
+  }).lean();
+
+  const localResult = localRaceResult
+    ? {
+        p1: driverById.get((localRaceResult.p1 as Types.ObjectId).toString()),
+        p2: driverById.get((localRaceResult.p2 as Types.ObjectId).toString()),
+        p3: driverById.get((localRaceResult.p3 as Types.ObjectId).toString()),
+      }
+    : null;
 
   const now = new Date();
   const sessionsWithResults = await Promise.all(
@@ -148,6 +163,26 @@ async function getGPData(gpId: string) {
     }
   }
 
+  // Inject local race result into the Race session if OpenF1 returned empty
+  const enrichedSessions = sessionsWithResults.map((s) => {
+    if (
+      s.session_name === "Race" &&
+      s.results.length === 0 &&
+      localResult
+    ) {
+      return {
+        ...s,
+        results: [
+          { position: 1, ...localResult.p1 },
+          { position: 2, ...localResult.p2 },
+          { position: 3, ...localResult.p3 },
+        ].filter((r) => r.code !== undefined),
+        isPast: true,
+      };
+    }
+    return s;
+  });
+
   return {
     gp: {
       id: gp._id.toString(),
@@ -161,8 +196,9 @@ async function getGPData(gpId: string) {
       countryFlag: gp.countryFlag,
       circuitImage: gp.circuitImage,
     },
-    sessions: sessionsWithResults,
+    sessions: enrichedSessions,
     startingGrid,
+    localResult,
   };
 }
 
@@ -193,15 +229,15 @@ export default async function GPDetailPage({
   const data = await getGPData(gpId);
   if (!data) notFound();
 
-  const { gp, sessions, startingGrid } = data;
+  const { gp, sessions, startingGrid, localResult } = data;
 
   return (
     <div className="space-y-6">
       <Link
-        href="/"
+        href="/calendar"
         className="text-sm text-zinc-400 hover:text-white transition-colors"
       >
-        ← Volver
+        ← Volver al calendario
       </Link>
 
       <div className="flex flex-col sm:flex-row gap-6 items-start">
@@ -240,6 +276,40 @@ export default async function GPDetailPage({
           </p>
         </div>
       </div>
+
+      {localResult && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold text-white">Podio oficial</h2>
+          <Card className="border-zinc-800 bg-zinc-900/80 p-4 space-y-2">
+            {[
+              { pos: 1, driver: localResult.p1 },
+              { pos: 2, driver: localResult.p2 },
+              { pos: 3, driver: localResult.p3 },
+            ].map(
+              ({ pos, driver }) =>
+                driver && (
+                  <div key={pos} className="flex items-center gap-3">
+                    <span className="font-bold text-sm text-zinc-400 w-6">
+                      P{pos}
+                    </span>
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{
+                        backgroundColor: driver.teamColour ?? "#666",
+                      }}
+                    />
+                    <span className="text-white font-medium">
+                      {driver.fullName}
+                    </span>
+                    <span className="text-zinc-500 text-xs ml-auto">
+                      {driver.team}
+                    </span>
+                  </div>
+                )
+            )}
+          </Card>
+        </section>
+      )}
 
       {startingGrid.length > 0 && (
         <section className="space-y-3">

@@ -359,7 +359,7 @@ export default async function TournamentPage({
 								)}
 								{gp.cancelled ? (
 									<Badge className='bg-red-950/50 text-red-400/70 border border-red-900/40 text-xs shrink-0 hidden sm:inline-flex'>
-										No disponible
+										Cancelado
 									</Badge>
 								) : (
 									<>
