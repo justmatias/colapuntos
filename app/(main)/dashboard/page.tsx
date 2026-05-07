@@ -101,8 +101,8 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {tournaments.map((t) => (
-            <Link key={t.id} href={`/tournaments/${t.id}`}>
-              <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-600 transition-colors cursor-pointer">
+            <Link key={t.id} href={`/tournaments/${t.id}`} className="block h-full">
+              <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/60 transition-all cursor-pointer h-full">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-base font-semibold text-white leading-tight">
@@ -120,9 +120,13 @@ export default async function DashboardPage() {
                 </CardHeader>
                 <CardContent className="flex items-end justify-between">
                   <p className="text-zinc-500 text-sm">{t.memberCount} participantes</p>
-                  <p className="text-2xl font-black text-white">
-                    {t.points} <span className="text-sm font-normal text-zinc-400">pts</span>
-                  </p>
+                  <div className="flex flex-col border-l-2 border-red-600/40 pl-3 text-right">
+                    <span className="text-xs text-zinc-600 uppercase tracking-widest mb-0.5">mis puntos</span>
+                    <div className="flex items-baseline gap-1 justify-end">
+                      <p className="text-3xl font-black tabular-nums text-white leading-none">{t.points}</p>
+                      <span className="text-sm font-normal text-zinc-500">pts</span>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </Link>

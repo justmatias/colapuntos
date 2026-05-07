@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MobileNav } from "@/components/mobile-nav";
 import { UserMenu } from "@/components/user-menu";
+import { NavLinks } from "@/components/nav-links";
 
 export default async function PublicLayout({
   children,
@@ -47,28 +48,18 @@ export default async function PublicLayout({
             </span>
           </Link>
 
-          <nav className="hidden sm:flex items-center gap-0.5 text-sm">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="px-2 sm:px-3 py-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
-            {!session && (
-              <Link
-                href="/login"
-                className={cn(
-                  buttonVariants({ size: "sm" }),
-                  "bg-red-600 hover:bg-red-700 text-white font-semibold"
-                )}
-              >
-                Ingresar
-              </Link>
-            )}
-          </nav>
+          <NavLinks links={navLinks} />
+          {!session && (
+            <Link
+              href="/login"
+              className={cn(
+                buttonVariants({ size: "sm" }),
+                "hidden sm:inline-flex bg-red-600 hover:bg-red-700 text-white font-semibold"
+              )}
+            >
+              Ingresar
+            </Link>
+          )}
 
           <div className="flex items-center gap-2">
             <MobileNav links={navLinks} />

@@ -22,13 +22,13 @@ import {
 	TableRow,
 } from '@/components/ui/table';
 
-const STATUS_ICON: Record<string, string> = {
-	completed: '✅',
-	past: '🏁',
-	closed: '🔒',
-	open: '🟢',
-	upcoming: '⏳',
-	cancelled: '⛔',
+const STATUS_DOT: Record<string, string> = {
+	completed: 'bg-zinc-500',
+	past: 'bg-zinc-600',
+	closed: 'bg-zinc-500',
+	open: 'bg-green-500',
+	upcoming: 'bg-amber-500',
+	cancelled: 'bg-red-900/60',
 };
 
 const WEATHER_EMOJI: Record<"dry" | "wet" | "mixed", string> = {
@@ -251,28 +251,40 @@ export default async function TournamentPage({
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{leaderboard.map((row) => (
-								<TableRow
-									key={row.userId}
-									className={`border-zinc-800 ${row.userId === data.currentUserId ? 'bg-zinc-800/50' : ''}`}
-								>
-									<TableCell className='text-zinc-400 font-mono'>
-										{row.rank}
-									</TableCell>
-									<TableCell className='font-medium text-white'>
-										{row.name}
-										{row.userId === data.currentUserId && (
-											<span className='ml-2 text-xs text-zinc-500'>(vos)</span>
+							{leaderboard.map((row) => {
+								const isCurrentUser = row.userId === data.currentUserId;
+								return (
+									<TableRow
+										key={row.userId}
+										className={cn(
+											'border-zinc-800',
+											isCurrentUser
+												? 'bg-zinc-800/70 border-l-2 border-l-red-500'
+												: '',
 										)}
-									</TableCell>
-									<TableCell className='text-zinc-400 text-right hidden sm:table-cell'>
-										{row.gpsPlayed}
-									</TableCell>
-									<TableCell className='text-right font-bold text-white'>
-										{row.total}
-									</TableCell>
-								</TableRow>
-							))}
+									>
+										<TableCell className='font-mono w-12'>
+											{row.rank <= 3 ? (
+												<span>{['🥇', '🥈', '🥉'][row.rank - 1]}</span>
+											) : (
+												<span className='text-zinc-600'>{row.rank}</span>
+											)}
+										</TableCell>
+										<TableCell className='font-medium text-white'>
+											{row.name}
+											{isCurrentUser && (
+												<span className='ml-2 text-xs text-zinc-500'>(vos)</span>
+											)}
+										</TableCell>
+										<TableCell className='text-zinc-400 text-right hidden sm:table-cell'>
+											{row.gpsPlayed}
+										</TableCell>
+										<TableCell className='text-right font-bold text-white'>
+											{row.total}
+										</TableCell>
+									</TableRow>
+								);
+							})}
 						</TableBody>
 					</Table>
 				</div>
@@ -285,126 +297,123 @@ export default async function TournamentPage({
 					{gpList.map((gp) => {
 						const isNext = nextGP?.id === gp.id;
 						const displayStatus = gp.cancelled ? 'cancelled' : gp.status;
+						const raceDate = new Date(gp.raceDate).toLocaleDateString('es-AR', {
+							day: 'numeric',
+							month: 'short',
+						});
+
+						const topLine = (
+							<div className='flex items-center gap-3 min-w-0'>
+								<span className='text-zinc-600 font-mono text-xs w-5 shrink-0 text-center'>
+									{gp.round}
+								</span>
+								<span
+									className={cn(
+										'w-2 h-2 rounded-full shrink-0',
+										STATUS_DOT[displayStatus],
+									)}
+								/>
+								{gp.countryFlag && (
+									<img
+										src={gp.countryFlag}
+										alt={gp.country}
+										className={cn(
+											'w-4 h-3 object-cover rounded-sm shrink-0',
+											gp.cancelled && 'grayscale',
+										)}
+									/>
+								)}
+								<p
+									className={cn(
+										'font-medium truncate flex-1',
+										gp.cancelled
+											? 'text-zinc-500 line-through'
+											: 'text-white',
+									)}
+								>
+									{gp.name}
+								</p>
+								{!gp.cancelled && gp.weatherCondition && (
+									<span
+										className='text-sm shrink-0'
+										title={WEATHER_LABEL[gp.weatherCondition as 'dry' | 'wet' | 'mixed']}
+									>
+										{WEATHER_EMOJI[gp.weatherCondition as 'dry' | 'wet' | 'mixed']}
+									</span>
+								)}
+								<div className='shrink-0 ml-1 flex items-center gap-2'>
+									{gp.cancelled && (
+										<Badge className='bg-red-950/50 text-red-400/70 border border-red-900/40 text-xs'>
+											Cancelado
+										</Badge>
+									)}
+									{!gp.cancelled && gp.status === 'open' && (
+										<Badge className='bg-green-700/30 text-green-400 border border-green-700/50 text-xs hidden sm:inline-flex'>
+											Abierto
+										</Badge>
+									)}
+									{!gp.cancelled && isNext && gp.status === 'upcoming' && (
+										<GPCountdown
+											deadline={new Date(gp.predictionDeadline).toISOString()}
+											timezone={gp.timezone}
+										/>
+									)}
+									{!gp.cancelled && !isNext && gp.status === 'upcoming' && (
+										<Badge className='bg-zinc-800 text-zinc-600 text-xs hidden sm:inline-flex'>
+											Próximo
+										</Badge>
+									)}
+									{!gp.cancelled && gp.status === 'past' && (
+										<Badge className='bg-zinc-800 text-zinc-500 text-xs hidden sm:inline-flex'>
+											Sin resultado
+										</Badge>
+									)}
+									{!gp.cancelled && gp.status === 'closed' && (
+										<Badge className='bg-zinc-800 text-zinc-400 text-xs hidden sm:inline-flex'>
+											Cerrado
+										</Badge>
+									)}
+									{!gp.cancelled && gp.status === 'completed' && (
+										<Badge className='bg-zinc-800 text-zinc-400 text-xs hidden sm:inline-flex'>
+											Completado
+										</Badge>
+									)}
+								</div>
+							</div>
+						);
+
+						const bottomLine = (
+							<p className='text-xs text-zinc-600 mt-0.5 pl-8'>
+								{raceDate} · {gp.circuit}
+							</p>
+						);
+
+						if (gp.cancelled) {
+							return (
+								<div
+									key={gp.id}
+									className='flex flex-col rounded-lg border border-zinc-800/50 bg-zinc-900/40 px-4 py-3 opacity-60'
+								>
+									{topLine}
+									{bottomLine}
+								</div>
+							);
+						}
+
 						return (
-							<div
+							<Link
 								key={gp.id}
+								href={`/tournaments/${tournament.id}/gp/${gp.id}/predict`}
 								className={cn(
-									'flex items-center gap-4 rounded-lg border px-4 py-3 transition-colors',
-									gp.cancelled
-										? 'border-zinc-800/50 bg-zinc-900/40 opacity-60'
-										: isNext
+									'flex flex-col rounded-lg border px-4 py-3 transition-colors cursor-pointer',
+									isNext
 										? 'border-amber-700/60 bg-amber-950/20 hover:border-amber-600/60'
 										: 'border-zinc-800 bg-zinc-900 hover:border-zinc-700',
 								)}
 							>
-								<span className='text-zinc-600 font-mono text-sm w-6 text-center'>
-									{gp.round}
-								</span>
-								<span className='text-lg'>{STATUS_ICON[displayStatus]}</span>
-								{gp.cancelled ? (
-									<div className='flex-1 min-w-0'>
-										<div className="flex items-center gap-2">
-											{gp.countryFlag && (
-												<img
-													src={gp.countryFlag}
-													alt={gp.country}
-													className="w-4 h-3 object-cover rounded-sm shrink-0 grayscale"
-												/>
-											)}
-											<p className='font-medium text-zinc-500 line-through truncate'>{gp.name}</p>
-										</div>
-										<p className='text-xs text-zinc-600'>
-											{new Date(gp.raceDate).toLocaleDateString('es-AR', {
-												day: 'numeric',
-												month: 'short',
-											})}
-											{' — '}
-											{gp.circuit}
-										</p>
-									</div>
-								) : (
-									<Link
-										href={`/tournaments/${tournament.id}/gp/${gp.id}/predict`}
-										className='flex-1 min-w-0'
-									>
-										<div className="flex items-center gap-2">
-											{gp.countryFlag && (
-												<img
-													src={gp.countryFlag}
-													alt={gp.country}
-													className="w-4 h-3 object-cover rounded-sm shrink-0"
-												/>
-											)}
-											<p className='font-medium text-white truncate'>{gp.name}</p>
-											{gp.weatherCondition && (
-												<span className="text-sm shrink-0" title={WEATHER_LABEL[gp.weatherCondition as "dry" | "wet" | "mixed"]}>
-													{WEATHER_EMOJI[gp.weatherCondition as "dry" | "wet" | "mixed"]}
-												</span>
-											)}
-											{isNext && gp.status === 'upcoming' && (
-												<Badge className="shrink-0 bg-amber-700/30 text-amber-400 border border-amber-700/50 text-xs">
-													Próximo
-												</Badge>
-											)}
-										</div>
-										<p className='text-xs text-zinc-500'>
-											{new Date(gp.raceDate).toLocaleDateString('es-AR', {
-												day: 'numeric',
-												month: 'short',
-											})}
-											{' — '}
-											{gp.circuit}
-										</p>
-									</Link>
-								)}
-								{gp.cancelled ? (
-									<Badge className='bg-red-950/50 text-red-400/70 border border-red-900/40 text-xs shrink-0 hidden sm:inline-flex'>
-										Cancelado
-									</Badge>
-								) : (
-									<>
-										<Link
-											href={`/gp/${gp.id}`}
-											className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 hidden sm:inline"
-										>
-											Ver GP ↗
-										</Link>
-										{gp.status === 'open' && (
-											<Badge className='bg-green-700/30 text-green-400 border border-green-700/50 text-xs shrink-0 hidden sm:inline-flex'>
-												Abierto
-											</Badge>
-										)}
-										{isNext && gp.status === 'upcoming' && (
-											<div className="shrink-0">
-												<GPCountdown
-													deadline={new Date(gp.predictionDeadline).toISOString()}
-													timezone={gp.timezone}
-												/>
-											</div>
-										)}
-										{!isNext && gp.status === 'upcoming' && (
-											<Badge className='bg-zinc-800 text-zinc-600 text-xs shrink-0 hidden sm:inline-flex'>
-												Próximo
-											</Badge>
-										)}
-										{gp.status === 'past' && (
-											<Badge className='bg-zinc-800 text-zinc-500 text-xs shrink-0 hidden sm:inline-flex'>
-												Sin resultado
-											</Badge>
-										)}
-										{gp.status === 'closed' && (
-											<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
-												Cerrado
-											</Badge>
-										)}
-										{gp.status === 'completed' && (
-											<Badge className='bg-zinc-800 text-zinc-400 text-xs shrink-0 hidden sm:inline-flex'>
-												Completado
-											</Badge>
-										)}
-									</>
-								)}
-							</div>
+								{topLine}
+								{bottomLine}
+							</Link>
 						);
 					})}
 				</div>

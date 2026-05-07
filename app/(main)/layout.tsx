@@ -8,6 +8,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/lib/models/User";
 import { UserMenu } from "@/components/user-menu";
 import { MobileNav } from "@/components/mobile-nav";
+import { NavLinks } from "@/components/nav-links";
 
 export default async function MainLayout({
   children,
@@ -41,17 +42,7 @@ export default async function MainLayout({
             </span>
           </Link>
 
-          <nav className="hidden sm:flex items-center gap-0.5 text-sm">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="px-2 sm:px-3 py-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          <NavLinks links={navLinks} />
 
           <div className="flex items-center gap-2">
             <MobileNav links={navLinks} />

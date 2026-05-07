@@ -70,13 +70,14 @@ export default async function ResultsPage({
       tournament: new Types.ObjectId(tournamentId),
       grandPrix: new Types.ObjectId(gpId),
     }).lean(),
-    Driver.find({ season: tournament.season }).select("fullName teamColour").lean(),
+    Driver.find({ season: tournament.season }).select("fullName teamColour code").lean(),
   ]);
 
   const driverMap = new Map(
-    drivers.map((d) => [d._id.toString(), { fullName: d.fullName as string, teamColour: d.teamColour as string | undefined }])
+    drivers.map((d) => [d._id.toString(), { fullName: d.fullName as string, teamColour: d.teamColour as string | undefined, code: d.code as string | undefined }])
   );
   const driverName = (id: string) => driverMap.get(id)?.fullName ?? "—";
+  const driverCode = (id: string) => driverMap.get(id)?.code ?? driverMap.get(id)?.fullName?.split(" ").pop()?.slice(0, 3).toUpperCase() ?? "—";
   const driverColour = (id: string) => driverMap.get(id)?.teamColour ?? undefined;
 
   const result = raceResult
@@ -140,7 +141,7 @@ export default async function ResultsPage({
       <div>
         <Link
           href={`/tournaments/${tournamentId}`}
-          className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-6 group"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/80 hover:text-white transition-colors mb-6 group"
         >
           <span className="text-base leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
           Volver al torneo
@@ -265,6 +266,22 @@ export default async function ResultsPage({
             </p>
           ) : (
             <div className="space-y-3">
+              {result && (
+                <div className="flex items-center gap-4 text-xs text-zinc-500 mb-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-500/30 border border-green-500/40" />
+                    Exacto
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-sm bg-yellow-500/30 border border-yellow-500/40" />
+                    En el podio
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block w-2.5 h-2.5 rounded-sm bg-zinc-800 border border-zinc-700" />
+                    Fuera
+                  </span>
+                </div>
+              )}
               {allPredictions.map((pred) => (
                 <div
                   key={pred.userId}
@@ -282,7 +299,16 @@ export default async function ResultsPage({
                       )}
                     </div>
                     {pred.score !== undefined && (
-                      <Badge className="bg-zinc-700 text-white font-bold">
+                      <Badge
+                        className={cn(
+                          "font-bold",
+                          pred.score >= 15
+                            ? "bg-green-700/40 text-green-300"
+                            : pred.score >= 8
+                            ? "bg-amber-700/40 text-amber-300"
+                            : "bg-zinc-700 text-zinc-400"
+                        )}
+                      >
                         {pred.score} pts
                       </Badge>
                     )}
@@ -299,8 +325,8 @@ export default async function ResultsPage({
                           <div className="text-xs font-bold mb-0.5">
                             {POSITION_LABELS[i]}
                           </div>
-                          <div className="text-xs leading-tight">
-                            {driverName(driverId)}
+                          <div className="text-xs font-mono leading-tight">
+                            {driverCode(driverId)}
                           </div>
                         </div>
                       );

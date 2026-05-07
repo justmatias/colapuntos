@@ -159,7 +159,7 @@ export default async function DriverDetailPage({
 
   return (
     <div className="space-y-8">
-      <Link href="/drivers" className="inline-flex items-center gap-1.5 text-sm text-zinc-400 hover:text-white transition-colors mb-2 group">
+      <Link href="/drivers" className="inline-flex items-center gap-1.5 text-sm font-semibold text-white/80 hover:text-white transition-colors mb-2 group">
         <span className="text-base leading-none group-hover:-translate-x-0.5 transition-transform">←</span>
         Pilotos
       </Link>

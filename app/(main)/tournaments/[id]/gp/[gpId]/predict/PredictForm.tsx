@@ -162,7 +162,15 @@ export function PredictForm({
         <input type="hidden" name="p3" value={p3} />
 
         {POSITIONS.map((pos, i) => (
-          <div key={pos.label} className={`rounded-lg border p-4 ${pos.borderClass}`}>
+          <div
+            key={pos.label}
+            className={cn(`rounded-lg border-l-4 border p-4 transition-colors`, pos.borderClass)}
+            style={
+              selections[i] && driverMap.get(selections[i])?.teamColour
+                ? { borderLeftColor: driverMap.get(selections[i])!.teamColour }
+                : undefined
+            }
+          >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2 gap-1">
               <span className="font-bold text-sm text-zinc-300">{pos.label}</span>
               <span className="text-xs text-zinc-500">
@@ -200,6 +208,21 @@ export function PredictForm({
         {saved && (
           <p className="text-sm text-green-400">¡Predicción guardada correctamente!</p>
         )}
+
+        <div className="flex items-center gap-2 px-1">
+          {[p1, p2, p3].map((val, i) => (
+            <span
+              key={i}
+              className={cn(
+                "w-2 h-2 rounded-full transition-colors",
+                val ? "bg-red-600" : "bg-zinc-700"
+              )}
+            />
+          ))}
+          <span className="text-xs text-zinc-500 ml-1">
+            {[p1, p2, p3].filter(Boolean).length}/3 posiciones elegidas
+          </span>
+        </div>
 
         <Button
           type="submit"
