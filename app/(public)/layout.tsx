@@ -49,19 +49,19 @@ export default async function PublicLayout({
           </Link>
 
           <NavLinks links={navLinks} />
-          {!session && (
-            <Link
-              href="/login"
-              className={cn(
-                buttonVariants({ size: "sm" }),
-                "hidden sm:inline-flex bg-red-600 hover:bg-red-700 text-white font-semibold"
-              )}
-            >
-              Ingresar
-            </Link>
-          )}
 
           <div className="flex items-center gap-2">
+            {!session && (
+              <Link
+                href="/login"
+                className={cn(
+                  buttonVariants({ size: "sm" }),
+                  "hidden sm:inline-flex bg-red-600 hover:bg-red-700 text-white font-semibold"
+                )}
+              >
+                Ingresar
+              </Link>
+            )}
             <MobileNav links={navLinks} />
             {session ? (
               <UserMenu

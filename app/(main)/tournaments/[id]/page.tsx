@@ -9,6 +9,8 @@ import { GrandPrix } from '@/lib/models/GrandPrix';
 import { Score } from '@/lib/models/Score';
 import { RaceResult } from '@/lib/models/RaceResult';
 import { User } from '@/lib/models/User';
+import { AuditLog } from '@/lib/models/AuditLog';
+import { AuditLogPanel } from '@/components/audit-log-panel';
 import { GPCountdown } from '@/app/(public)/calendar/GPCountdown';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -156,6 +158,22 @@ async function getTournamentData(tournamentId: string, userId: string) {
 		(g) => !g.cancelled && (g.status === 'open' || g.status === 'upcoming'),
 	);
 
+	const auditLogs = await AuditLog.find({ tournament: tournament._id })
+		.sort({ createdAt: -1 })
+		.limit(50)
+		.populate('user', 'name')
+		.populate('grandPrix', 'name')
+		.lean();
+
+	const logEntries = auditLogs.map((log) => ({
+		id: log._id.toString(),
+		action: log.action as string,
+		details: log.details,
+		createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : null,
+		userName: (log.user as unknown as { name?: string } | null)?.name ?? 'Sistema',
+		gpName: (log.grandPrix as unknown as { name?: string } | null)?.name ?? null,
+	}));
+
 	return {
 		tournament: {
 			id: tournament._id.toString(),
@@ -167,6 +185,7 @@ async function getTournamentData(tournamentId: string, userId: string) {
 		leaderboard,
 		gpList,
 		nextGP,
+		logEntries,
 		currentUserId: userId,
 	};
 }
@@ -183,7 +202,7 @@ export default async function TournamentPage({
 	const data = await getTournamentData(id, session.user.id);
 	if (!data) notFound();
 
-	const { tournament, leaderboard, gpList, nextGP } = data;
+	const { tournament, leaderboard, gpList, nextGP, logEntries } = data;
 
 	return (
 		<div className='space-y-8'>
@@ -403,7 +422,11 @@ export default async function TournamentPage({
 						return (
 							<Link
 								key={gp.id}
-								href={`/tournaments/${tournament.id}/gp/${gp.id}/predict`}
+								href={
+									gp.status === 'completed' || gp.status === 'past' || gp.status === 'closed'
+										? `/tournaments/${tournament.id}/gp/${gp.id}/results`
+										: `/tournaments/${tournament.id}/gp/${gp.id}/predict`
+								}
 								className={cn(
 									'flex flex-col rounded-lg border px-4 py-3 transition-colors cursor-pointer',
 									isNext
@@ -417,6 +440,12 @@ export default async function TournamentPage({
 						);
 					})}
 				</div>
+			</section>
+
+			{/* Changelog */}
+			<section>
+				<h2 className='text-lg font-semibold mb-3'>Historial de cambios</h2>
+				<AuditLogPanel entries={logEntries} />
 			</section>
 		</div>
 	);

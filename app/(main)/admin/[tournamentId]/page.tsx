@@ -12,7 +12,7 @@ import { User } from "@/lib/models/User";
 import { AuditLog } from "@/lib/models/AuditLog";
 import { RetroactivePredictionsPanel } from "./RetroactivePredictionsPanel";
 import { ParticipantsPanel } from "./ParticipantsPanel";
-import { AuditLogPanel } from "./AuditLogPanel";
+import { AuditLogPanel } from "@/components/audit-log-panel";
 import { DeleteTournament } from "./DeleteTournament";
 
 async function getAdminData(tournamentId: string, userId: string) {

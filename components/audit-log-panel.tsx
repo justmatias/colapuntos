@@ -1,4 +1,4 @@
-import { ClipboardList, UserX, RefreshCw, CloudDownload } from "lucide-react";
+import { ClipboardList, UserX, RefreshCw, CloudDownload, History, XCircle, RotateCcw } from "lucide-react";
 
 type LogEntry = {
   id: string;
@@ -18,6 +18,9 @@ const ACTION_CONFIG: Record<string, { label: string; Icon: typeof ClipboardList 
   sync_result: { label: "Sync automático", Icon: CloudDownload },
   remove_participant: { label: "Eliminó participante", Icon: UserX },
   regenerate_invite: { label: "Regeneró código", Icon: RefreshCw },
+  save_retroactive_prediction: { label: "Carga de predicción", Icon: History },
+  gp_cancelled: { label: "GP cancelado", Icon: XCircle },
+  gp_uncancelled: { label: "GP reactivado", Icon: RotateCcw },
 };
 
 function formatDate(iso: string | null): string {
