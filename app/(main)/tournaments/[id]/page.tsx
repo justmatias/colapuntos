@@ -24,6 +24,7 @@ import {
 	TableRow,
 } from '@/components/ui/table';
 import { LeaveTournament } from './LeaveTournament';
+import { SyncCountdown } from '@/components/sync-countdown';
 
 const STATUS_DOT: Record<string, string> = {
 	completed: 'bg-zinc-500',
@@ -254,12 +255,6 @@ export default async function TournamentPage({
 			<section>
 				<div className='flex items-center justify-between mb-3'>
 					<h2 className='text-lg font-semibold'>Posiciones</h2>
-					<Link
-						href={`/tournaments/${tournament.id}/leaderboard`}
-						className='text-sm text-zinc-400 hover:text-white transition-colors'
-					>
-						Ver detalle →
-					</Link>
 				</div>
 				<div className='rounded-lg border border-zinc-800 overflow-hidden'>
 					<Table>
@@ -315,7 +310,10 @@ export default async function TournamentPage({
 
 			{/* GP Calendar */}
 			<section>
-				<h2 className='text-lg font-semibold mb-3'>Calendario</h2>
+				<div className='flex items-center justify-between mb-3'>
+					<h2 className='text-lg font-semibold'>Calendario</h2>
+					{gpList.some((gp) => gp.status === 'past') && <SyncCountdown />}
+				</div>
 				<div className='space-y-2'>
 					{gpList.map((gp) => {
 						const isNext = nextGP?.id === gp.id;
