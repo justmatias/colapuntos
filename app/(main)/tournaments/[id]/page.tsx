@@ -354,7 +354,7 @@ export default async function TournamentPage({
 								>
 									{gp.name}
 								</p>
-								{!gp.cancelled && gp.weatherCondition && (
+								{!gp.cancelled && gp.weatherCondition && gp.status === 'completed' && (
 									<span
 										className='text-sm shrink-0'
 										title={WEATHER_LABEL[gp.weatherCondition as 'dry' | 'wet' | 'mixed']}
